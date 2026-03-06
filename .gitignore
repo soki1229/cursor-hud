@@ -1,0 +1,16 @@
+# Build output
+dist/
+build/
+*.spec
+
+# PyInstaller
+__pycache__/
+*.py[cod]
+
+# Runtime files (written next to EXE — not committed)
+cursor_hud_settings.json
+cursor_hud.log
+
+# OS
+.DS_Store
+Thumbs.db
