@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.0.0-beta.2 — 2026-03-10
+
+### Features
+- System tray: minimize to tray, show/hide from tray menu
+- Global shortcuts: Escape to close/minimize
+- Usage metrics (local event counts; no server upload)
+- Debug panel and credits page improvements; section header helper
+
+### Refactors
+- Docstring and imports cleanup; v4 → v4.1
+- Settings/API: `load_settings`, `read_cursor_token`, `api_headers`, DataFetcher, `parse_data`
+- QSS helpers, hatch pixmap cache; ArcGauge, SegBar, MiniBar, Card, ToggleSwitch (full-row click, `toggle()`)
+- ProfilePage, SettingsPage (row click); StatusBar, NavBar, ResizeGrip, CompactStack
+- HUDWindow: tray, shortcuts, size/position handling; `main()` tweaks
+
+### CI
+- Release workflow: CHANGELOG extraction with `index()` and debug echo
+
+---
+
 ## v1.0.0-beta.1 — 2026-03-10
 
 First release (beta).
