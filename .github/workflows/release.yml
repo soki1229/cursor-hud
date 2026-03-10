@@ -32,10 +32,12 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           awk -v tag="$TAG" '
-            $0 ~ "## " tag { found=1; next }
-            found && /^## / { exit }
+            index($0, "## " tag) == 1 { found=1; next }
+            found && index($0, "## ") == 1 { exit }
             found { print }
           ' CHANGELOG.md > release_notes.md
+          echo "Tag: $TAG"
+          echo "Release notes length: $(wc -c < release_notes.md) bytes"
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
