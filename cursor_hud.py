@@ -254,78 +254,87 @@ except (ValueError, TypeError):
 # ══════════════════════════════════════════════════════════════
 STRINGS: dict[str, dict[str, str]] = {
     "ko": {
-        "nav_credit":"크레딧","nav_profile":"프로필","nav_settings":"설정",
-        "spent_label":"소진","remain_label":"잔여","bonus_saved":"보너스 절약","personal_section":"개인 크레딧",
-        "incl_row":"기본 포함","bonus_row":"보너스 사용","bonus_free_label":"무료 처리됨",
-        "status_included":"기본 크레딧 사용 중","status_bonus":"보너스 크레딧 사용 중","status_od":"추가 과금 사용 중",
-        "status_badge_incl":"기본 크레딧 소진 중","status_badge_bonus":"보너스 크레딧 소진 중","status_badge_od":"PAYG",
-        "row_incl":"기본 플랜","row_bonus":"보너스","row_extra":"추가 과금",
-        "personal_od":"추가 과금","org_section":"조직 크레딧","org_od":"추가 과금 (팀)",
-        "not_used":"미사용",
-        "official_pct":"Cursor 공식 사용률",
-        "auto_pct":"Auto 모델 사용률","api_pct":"Named 모델 사용률",
-        "profile_title":"계정","field_name":"이름","field_email":"이메일",
-        "field_verified":"인증","field_since":"가입일","field_days":"가입 기간",
-        "field_plan":"플랜","field_cycle":"청구 주기",
-        "verified_yes":"✓ 인증됨","verified_no":"✗ 미인증","member_days":"일",
-        "settings_title":"설정","lang_label":"언어","theme_label":"테마",
-        "theme_dark":"다크","theme_light":"라이트","theme_midnight":"미드나잇","theme_matrix":"매트릭스",
-        "show_sections":"표시 항목",
-        "show_personal":"개인 크레딧",
-        "show_org":"조직 크레딧",
-        "show_official":"공식 사용률",
-        "auto_saved":"자동 저장됨","refresh_btn":"↻",
-        "next_refresh":"갱신까지","seconds":"초",
-        "err_no_db":"Cursor DB를 찾을 수 없음\n",
-        "err_token":"토큰 읽기 실패","err_api":"API 응답 없음",
-        "err_fetch":"데이터를 불러올 수 없습니다.",
-        "free_plan_notice":"크레딧 미제공 플랜",
-        "lang_ko":"한국어","lang_en":"English",
-        "debug_btn":"로그","debug_title":"디버그 로그",
-        "debug_copy":"복사","debug_close":"닫기",
-        "startup_boot":"부팅 시 자동실행",
-        "pin_top":"항상 위",
+        "nav_credit": "크레딧", "nav_profile": "프로필", "nav_settings": "설정",
+        "spent_label": "소진", "remain_label": "잔여", "bonus_saved": "보너스 절약",
+        "personal_section": "개인 크레딧",
+        "incl_row": "기본 포함", "bonus_row": "보너스 사용", "bonus_free_label": "무료 처리됨",
+        "status_included": "기본 크레딧 사용 중", "status_bonus": "보너스 크레딧 사용 중",
+        "status_od": "추가 과금 사용 중",
+        "status_badge_incl": "기본 크레딧 소진 중", "status_badge_bonus": "보너스 크레딧 소진 중",
+        "status_badge_od": "PAYG",
+        "row_incl": "기본 플랜", "row_bonus": "보너스", "row_extra": "추가 과금",
+        "personal_od": "추가 과금", "org_section": "조직 크레딧", "org_od": "추가 과금 (팀)",
+        "not_used": "미사용",
+        "official_pct": "Cursor 공식 사용률",
+        "auto_pct": "Auto 모델 사용률", "api_pct": "Named 모델 사용률",
+        "profile_title": "계정", "field_name": "이름", "field_email": "이메일",
+        "field_verified": "인증", "field_since": "가입일", "field_days": "가입 기간",
+        "field_plan": "플랜", "field_cycle": "청구 주기",
+        "verified_yes": "✓ 인증됨", "verified_no": "✗ 미인증", "member_days": "일",
+        "settings_title": "설정", "lang_label": "언어", "theme_label": "테마",
+        "theme_dark": "다크", "theme_light": "라이트",
+        "theme_midnight": "미드나잇", "theme_matrix": "매트릭스",
+        "show_sections": "표시 항목",
+        "show_personal": "개인 크레딧", "show_org": "조직 크레딧", "show_official": "공식 사용률",
+        "auto_saved": "자동 저장됨", "refresh_btn": "↻",
+        "next_refresh": "갱신까지", "seconds": "초",
+        "err_no_db": "Cursor DB를 찾을 수 없음\n",
+        "err_token": "토큰 읽기 실패", "err_api": "API 응답 없음",
+        "err_fetch": "데이터를 불러올 수 없습니다.",
+        "err_retry": "재시도",
+        "free_plan_notice": "크레딧 미제공 플랜",
+        "lang_ko": "한국어", "lang_en": "English",
+        "debug_btn": "로그", "debug_title": "디버그 로그",
+        "debug_copy": "복사", "debug_close": "닫기",
+        "startup_boot": "부팅 시 자동실행", "pin_top": "항상 위",
+        "tray_show": "열기", "tray_refresh": "새로고침", "tray_quit": "종료",
     },
     "en": {
-        "nav_credit":"Credits","nav_profile":"Profile","nav_settings":"Settings",
-        "spent_label":"Spent","remain_label":"remaining","bonus_saved":"bonus saved","personal_section":"Personal Credits",
-        "incl_row":"Included","bonus_row":"Bonus Used","bonus_free_label":"free of charge",
-        "status_included":"On included credits","status_bonus":"On bonus credits","status_od":"On-Demand active",
-        "status_badge_incl":"On included credits","status_badge_bonus":"On bonus credits","status_badge_od":"PAYG",
-        "row_incl":"Plan credits","row_bonus":"Bonus","row_extra":"On-Demand",
-        "personal_od":"On-Demand","org_section":"Organization Credits","org_od":"On-Demand (Team)",
-        "not_used":"Not Used",
-        "official_pct":"Cursor Official Usage",
-        "auto_pct":"Auto Model Usage","api_pct":"Named Model Usage",
-        "profile_title":"Account","field_name":"Name","field_email":"Email",
-        "field_verified":"Verified","field_since":"Member Since","field_days":"Membership",
-        "field_plan":"Plan","field_cycle":"Billing Cycle",
-        "verified_yes":"✓ Verified","verified_no":"✗ Not Verified","member_days":"days",
-        "settings_title":"Settings","lang_label":"Language","theme_label":"Theme",
-        "theme_dark":"Dark","theme_light":"Light","theme_midnight":"Midnight","theme_matrix":"Matrix",
-        "show_sections":"Visible Sections",
-        "show_personal":"Personal Credits",
-        "show_org":"Organization Credits",
-        "show_official":"Usage Rates",
-        "auto_saved":"Auto-saved","refresh_btn":"↻",
-        "next_refresh":"Next refresh","seconds":"s",
-        "err_no_db":"Cursor DB not found\n",
-        "err_token":"Failed to read token","err_api":"No API response",
-        "err_fetch":"Failed to load data.",
-        "free_plan_notice":"No credit data on Free plan",
-        "lang_ko":"한국어","lang_en":"English",
-        "debug_btn":"Log","debug_title":"Debug Log",
-        "debug_copy":"Copy","debug_close":"Close",
-        "startup_boot":"Start on Boot",
-        "pin_top":"Always on Top",
+        "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
+        "spent_label": "Spent", "remain_label": "remaining", "bonus_saved": "bonus saved",
+        "personal_section": "Personal Credits",
+        "incl_row": "Included", "bonus_row": "Bonus Used", "bonus_free_label": "free of charge",
+        "status_included": "On included credits", "status_bonus": "On bonus credits",
+        "status_od": "On-Demand active",
+        "status_badge_incl": "On included credits", "status_badge_bonus": "On bonus credits",
+        "status_badge_od": "PAYG",
+        "row_incl": "Plan credits", "row_bonus": "Bonus", "row_extra": "On-Demand",
+        "personal_od": "On-Demand", "org_section": "Organization Credits",
+        "org_od": "On-Demand (Team)", "not_used": "Not Used",
+        "official_pct": "Cursor Official Usage",
+        "auto_pct": "Auto Model Usage", "api_pct": "Named Model Usage",
+        "profile_title": "Account", "field_name": "Name", "field_email": "Email",
+        "field_verified": "Verified", "field_since": "Member Since",
+        "field_days": "Membership", "field_plan": "Plan", "field_cycle": "Billing Cycle",
+        "verified_yes": "✓ Verified", "verified_no": "✗ Not Verified", "member_days": "days",
+        "settings_title": "Settings", "lang_label": "Language", "theme_label": "Theme",
+        "theme_dark": "Dark", "theme_light": "Light",
+        "theme_midnight": "Midnight", "theme_matrix": "Matrix",
+        "show_sections": "Visible Sections",
+        "show_personal": "Personal Credits", "show_org": "Organization Credits",
+        "show_official": "Usage Rates",
+        "auto_saved": "Auto-saved", "refresh_btn": "↻",
+        "next_refresh": "Next refresh", "seconds": "s",
+        "err_no_db": "Cursor DB not found\n",
+        "err_token": "Failed to read token", "err_api": "No API response",
+        "err_fetch": "Failed to load data.",
+        "err_retry": "Retry",
+        "free_plan_notice": "No credit data on Free plan",
+        "lang_ko": "한국어", "lang_en": "English",
+        "debug_btn": "Log", "debug_title": "Debug Log",
+        "debug_copy": "Copy", "debug_close": "Close",
+        "startup_boot": "Start on Boot", "pin_top": "Always on Top",
+        "tray_show": "Show", "tray_refresh": "Refresh", "tray_quit": "Quit",
     },
 }
 
 DEFAULT_SETTINGS: dict = {
-    "lang":"ko","theme":"dark",
-    "show_personal":True,"show_org":True,"show_official":True,"pin_on_top":True,
-    "win_x":None,"win_y":None,"win_w":WIN_W,"mini_mode":False,
+    "lang": "ko", "theme": "dark",
+    "show_personal": True, "show_org": True, "show_official": True,
+    "pin_on_top": True,
+    "win_x": None, "win_y": None, "win_w": WIN_W, "mini_mode": False,
 }
+
 
 def load_settings() -> dict:
     if SETTINGS_FILE.exists():
@@ -336,31 +345,40 @@ def load_settings() -> dict:
             pass
     return dict(DEFAULT_SETTINGS)
 
+
 def save_settings(s: dict):
     try:
         SETTINGS_FILE.write_text(json.dumps(s, indent=2), encoding="utf-8")
     except Exception as e:
         log.error("save_settings failed: %s", e)
 
+
 def S(settings: dict, key: str) -> str:
     lang = settings.get("lang", "ko")
     return STRINGS.get(lang, STRINGS["ko"]).get(key, key)
+
 
 # ══════════════════════════════════════════════════════════════
 #  TOKEN / DB
 # ══════════════════════════════════════════════════════════════
 def _cursor_db_path() -> Path:
-    if sys.platform == "win32":    base = Path(os.environ.get("APPDATA", ""))
-    elif sys.platform == "darwin": base = Path.home() / "Library" / "Application Support"
-    else:                          base = Path.home() / ".config"
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", ""))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path.home() / ".config"
     return base / "Cursor" / "User" / "globalStorage" / "state.vscdb"
+
 
 def decode_jwt(token: str) -> dict:
     try:
-        p = token.split(".")[1]; p += "=" * (4 - len(p) % 4)
+        p = token.split(".")[1]
+        p += "=" * (4 - len(p) % 4)
         return json.loads(base64.urlsafe_b64decode(p))
     except Exception:
         return {}
+
 
 def read_cursor_token() -> tuple[str, str]:
     db_path = _cursor_db_path()
@@ -377,10 +395,12 @@ def read_cursor_token() -> tuple[str, str]:
         conn = sqlite3.connect(str(tmp))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+
         def _r(k):
             cur.execute("SELECT value FROM ItemTable WHERE key=? LIMIT 1", (k,))
             row = cur.fetchone()
             return (row["value"] or "").strip() if row else ""
+
         token = _r("cursorAuth/accessToken")
         email = _r("cursorAuth/cachedEmail")
         conn.close()
@@ -395,6 +415,7 @@ def read_cursor_token() -> tuple[str, str]:
     finally:
         tmp.unlink(missing_ok=True)
 
+
 def api_headers(cookie: str) -> dict:
     return {
         "Cookie":       f"WorkosCursorSessionToken={cookie}",
@@ -405,8 +426,9 @@ def api_headers(cookie: str) -> dict:
         "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0",
     }
 
+
 # ══════════════════════════════════════════════════════════════
-#  DATA FETCHER
+#  DATA FETCHER  — blockSignals guard on replacement
 # ══════════════════════════════════════════════════════════════
 class DataFetcher(QThread):
     ready = pyqtSignal(dict)
@@ -416,22 +438,26 @@ class DataFetcher(QThread):
         r = session.get(f"{BASE_URL}{path}", allow_redirects=False, timeout=12)
         if r.status_code in (301, 302, 307, 308):
             loc = r.headers.get("Location", "")
-            if loc.startswith("/"): loc = BASE_URL + loc
+            if loc.startswith("/"):
+                loc = BASE_URL + loc
             r = session.get(loc, timeout=12)
         log.debug("GET %s → %s", path, r.status_code)
         return r.json() if r.ok else None
 
     def run(self):
+        cookie = ""
         try:
             cookie, email = read_cursor_token()
             if not cookie:
-                self.error.emit(S(load_settings(), "err_token")); return
+                self.error.emit(S(load_settings(), "err_token"))
+                return
             sess = requests.Session()
             sess.headers.update(api_headers(cookie))
             summary = self._get(sess, "/api/usage-summary")
             profile = self._get(sess, "/api/auth/me")
             if not summary:
-                self.error.emit(S(load_settings(), "err_api")); return
+                self.error.emit(S(load_settings(), "err_api"))
+                return
             raw = {
                 "summary":    summary,
                 "profile":    profile or {},
@@ -440,20 +466,27 @@ class DataFetcher(QThread):
             }
             self.ready.emit(raw)
         except Exception as exc:
+            cookie = "[REDACTED]"  # prevent token leaking in traceback
             log.exception("DataFetcher.run")
             self.error.emit(str(exc))
+
 
 # ══════════════════════════════════════════════════════════════
 #  DATA MODEL
 # ══════════════════════════════════════════════════════════════
 def _safe_int(v, default: int = 0) -> int:
-    """Safely coerce an API field to int, handling None, strings, and non-integers."""
-    try: return int(v or 0)
-    except (TypeError, ValueError): return default
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return default
+
 
 def _safe_float(v, default: float = 0.0) -> float:
-    try: return float(v or 0)
-    except (TypeError, ValueError): return default
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return default
+
 
 def parse_data(raw: dict) -> dict:
     s  = raw.get("summary", {}) or {}
