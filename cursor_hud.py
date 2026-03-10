@@ -1532,34 +1532,51 @@ class ProfilePage(QWidget):
         self._rows: dict[str, KVRow] = {}
         self._build()
 
-    def T(self, k): return S(self.settings, k)
+    def T(self, k):
+        return S(self.settings, k)
 
     def _build(self):
-        vl = QVBoxLayout(self); vl.setContentsMargins(12,8,12,8); vl.setSpacing(8)
-        card = Card("c_green"); cl = QVBoxLayout(card); cl.setContentsMargins(14,12,14,12); cl.setSpacing(6)
+        vl = QVBoxLayout(self)
+        vl.setContentsMargins(12, 8, 12, 8)
+        vl.setSpacing(8)
+        card = Card("c_green")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        cl.setSpacing(6)
         self._hdr_profile = section_hdr(self.T("profile_title"), "c_green")
-        cl.addWidget(self._hdr_profile); cl.addWidget(Divider())
-        for key, lk in [("name","field_name"),("email","field_email"),("verified","field_verified"),
-                        ("since","field_since"),("days","field_days"),("plan","field_plan"),("cycle","field_cycle")]:
+        cl.addWidget(self._hdr_profile)
+        cl.addWidget(Divider())
+        for key, lk in [
+            ("name", "field_name"), ("email", "field_email"),
+            ("verified", "field_verified"), ("since", "field_since"),
+            ("days", "field_days"), ("plan", "field_plan"), ("cycle", "field_cycle"),
+        ]:
             self._rows[key] = kv_row(cl, self.T(lk))
-        vl.addWidget(card); vl.addStretch()
+        vl.addWidget(card)
+        vl.addStretch()
 
     def _rebuild_labels(self):
         self._hdr_profile.setText(self.T("profile_title").upper())
         set_lbl_color(self._hdr_profile, c("c_green"))
-        for key, lk in [("name","field_name"),("email","field_email"),("verified","field_verified"),
-                        ("since","field_since"),("days","field_days"),("plan","field_plan"),("cycle","field_cycle")]:
+        for key, lk in [
+            ("name", "field_name"), ("email", "field_email"),
+            ("verified", "field_verified"), ("since", "field_since"),
+            ("days", "field_days"), ("plan", "field_plan"), ("cycle", "field_cycle"),
+        ]:
             update_kv_label(self._rows[key], self.T(lk))
 
     def refresh_theme(self):
-        """Re-apply colors on theme change."""
         self._rebuild_labels()
 
     def update_data(self, d: dict):
-        pr = d["profile"]; cyc = d["cycle"]
+        pr = d["profile"]
+        cyc = d["cycle"]
         self._rebuild_labels()
-        def sv(k, v, col=None): set_kv(self._rows[k], v, col)
-        sv("name",  pr["name"]  or "—")
+
+        def sv(k, v, col=None):
+            set_kv(self._rows[k], v, col)
+
+        sv("name", pr["name"] or "—")
         sv("email", pr["email"] or "—")
         sv("verified",
            self.T("verified_yes") if pr["verified"] else self.T("verified_no"),
@@ -1568,7 +1585,7 @@ class ProfilePage(QWidget):
         sv("days",
            f"{pr['days_member']} {self.T('member_days')}" if pr["days_member"] else "—",
            c("t_muted"))
-        sv("plan",  f"{cyc['membership']} / {cyc['limit_type']}")
+        sv("plan", f"{cyc['membership']} / {cyc['limit_type']}")
         sv("cycle", f"{cyc['start']}  →  {cyc['end']}")
 
 
@@ -1576,127 +1593,147 @@ class ProfilePage(QWidget):
 #  PAGE: SETTINGS
 # ══════════════════════════════════════════════════════════════
 class SettingsPage(QWidget):
-    changed             = pyqtSignal()
+    changed              = pyqtSignal()
     height_adjust_needed = pyqtSignal()
-    theme_changed = pyqtSignal(str)
-    pin_changed   = pyqtSignal(bool)
+    theme_changed        = pyqtSignal(str)
+    pin_changed          = pyqtSignal(bool)
 
-    TOGGLES_PIN  = [("pin_on_top","pin_top")]
+    TOGGLES_PIN  = [("pin_on_top", "pin_top")]
     STARTUP_KEY  = "startup_boot"
-    THEMES_ORDER = [("dark","theme_dark"),("light","theme_light"),
-                    ("midnight","theme_midnight"),("matrix","theme_matrix")]
+    THEMES_ORDER = [
+        ("dark", "theme_dark"), ("light", "theme_light"),
+        ("midnight", "theme_midnight"), ("matrix", "theme_matrix"),
+    ]
 
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.settings = settings
-        self._vl = QVBoxLayout(self); self._vl.setContentsMargins(12,8,12,8); self._vl.setSpacing(8)
+        self._vl = QVBoxLayout(self)
+        self._vl.setContentsMargins(12, 8, 12, 8)
+        self._vl.setSpacing(8)
         self._build()
 
-    def T(self, k): return S(self.settings, k)
+    def T(self, k):
+        return S(self.settings, k)
 
     def _build(self):
-        """Build widgets once on first use. Language/theme changes are handled by _update_texts() only."""
-        card = Card("accent"); cl = QVBoxLayout(card); cl.setContentsMargins(14,12,14,12); cl.setSpacing(8)
-
-        # dict for widget text references
-        self._t: dict = {}   # key → QLabel or QPushButton
+        card = Card("accent")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        cl.setSpacing(8)
+        self._t: dict = {}
 
         self._t["settings_title"] = section_hdr(self.T("settings_title"))
-        cl.addWidget(self._t["settings_title"]); cl.addWidget(Divider())
+        cl.addWidget(self._t["settings_title"])
+        cl.addWidget(Divider())
 
         # Language
         self._t["lang_label"] = ql(self.T("lang_label"), 8, c("t_muted"))
         cl.addWidget(self._t["lang_label"])
-        lr = QWidget(); lr.setAttribute(Qt.WA_TranslucentBackground)
-        ll = QHBoxLayout(lr); ll.setContentsMargins(0,0,0,0); ll.setSpacing(6)
-        ac = c("accent").name(); mu = c("t_muted").name()
-        lang_style = (
-            f"QPushButton{{color:{mu};background:transparent;border:1px solid rgba(128,128,128,0.28);border-radius:3px;font-size:9px;padding:1px 12px;font-family:Segoe UI;font-weight:600;}}QPushButton:checked{{color:{ac};border:1px solid {ac};background:rgba(128,128,128,0.10);}}"
-        )
-        for code, lkey in [("en","lang_en"),("ko","lang_ko")]:
+        lr = QWidget()
+        lr.setAttribute(Qt.WA_TranslucentBackground)
+        ll = QHBoxLayout(lr)
+        ll.setContentsMargins(0, 0, 0, 0)
+        ll.setSpacing(6)
+        for code, lkey in [("en", "lang_en"), ("ko", "lang_ko")]:
             btn = QPushButton(self.T(lkey))
-            btn.setCheckable(True); btn.setChecked(self.settings.get("lang","ko") == code)
-            btn.setFixedHeight(22); btn.setStyleSheet(lang_style)
+            btn.setCheckable(True)
+            btn.setChecked(self.settings.get("lang", "ko") == code)
+            btn.setFixedHeight(22)
+            btn.setStyleSheet(_pill_btn_qss())
             btn.clicked.connect(lambda _, lc=code: self._set_lang(lc))
             ll.addWidget(btn)
             self._t[f"lang_{code}"] = btn
-        ll.addStretch(); cl.addWidget(lr); cl.addWidget(Divider())
+        ll.addStretch()
+        cl.addWidget(lr)
+        cl.addWidget(Divider())
 
         # Theme
         self._t["theme_label"] = ql(self.T("theme_label"), 8, c("t_muted"))
         cl.addWidget(self._t["theme_label"])
         cur_theme = self.settings.get("theme", "dark")
         rows = [QWidget(), QWidget()]
-        rls  = [QHBoxLayout(r) for r in rows]
-        for rl in rls: rl.setContentsMargins(0,0,0,0); rl.setSpacing(6)
+        for r in rows:
+            r.setAttribute(Qt.WA_TranslucentBackground)
+        rls = [QHBoxLayout(r) for r in rows]
+        for rl in rls:
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(6)
         for i, (tname, tkey) in enumerate(self.THEMES_ORDER):
-            btn = self._theme_btn(self.T(tkey), THEMES[tname], tname == cur_theme)
+            btn = QPushButton(self.T(tkey))
+            btn.setCheckable(True)
+            btn.setChecked(tname == cur_theme)
+            btn.setFixedHeight(28)
+            btn.setStyleSheet(_theme_btn_qss(THEMES[tname]))
             btn.clicked.connect(lambda _, tn=tname: self._set_theme(tn))
             rls[0 if i < 2 else 1].addWidget(btn, 1)
             self._t[f"theme_{tname}"] = btn
-        for r in rows: cl.addWidget(r)
+        for r in rows:
+            cl.addWidget(r)
         cl.addWidget(Divider())
 
         # Visibility toggles
-        self._sw_refs: dict = {}   # settings_key → (row_widget, label, ToggleSwitch)
+        self._sw_refs: dict = {}
         self._t["show_sections"] = ql(self.T("show_sections"), 8, c("t_muted"))
         cl.addWidget(self._t["show_sections"])
-        for key, skey, indent in [
-            ("show_personal",      "show_personal",      False),
-            ("show_org",           "show_org",           False),
-            ("show_official",      "show_official",      False),
+        for key, skey in [
+            ("show_personal", "show_personal"),
+            ("show_org", "show_org"),
+            ("show_official", "show_official"),
         ]:
-            row, lbl, sw = self._switch_row(self.T(skey), key, self.settings.get(key, True), indent)
+            row, lbl, sw = self._switch_row(
+                self.T(skey), key, self.settings.get(key, True))
             cl.addWidget(row)
             self._t[skey] = lbl
             self._sw_refs[key] = (row, lbl, sw)
-        # apply initial disabled state to sub-options
-        # no sub-options (show_org is a standalone toggle)
-
         cl.addWidget(Divider())
 
-        # System options: Always on Top + Start on Boot
-        row, lbl, sw = self._switch_row(self.T("pin_top"), "pin_on_top", self.settings.get("pin_on_top", True))
+        # System options
+        row, lbl, sw = self._switch_row(
+            self.T("pin_top"), "pin_on_top", self.settings.get("pin_on_top", True))
         cl.addWidget(row)
         self._t["pin_top"] = lbl
         self._sw_refs["pin_on_top"] = (row, lbl, sw)
 
         if sys.platform == "win32":
-            row, lbl, _ = self._switch_row(self.T("startup_boot"), "_startup",
-                                        self._is_startup_registered())
+            row, lbl, _ = self._switch_row(
+                self.T("startup_boot"), "_startup", self._is_startup_registered())
             cl.addWidget(row)
             self._t["startup_boot"] = lbl
-
         cl.addWidget(Divider())
 
         self._t["auto_saved"] = ql(self.T("auto_saved"), 8, c("t_dim"))
         cl.addWidget(self._t["auto_saved"])
-        self._vl.addWidget(card); self._vl.addStretch()
+        self._vl.addWidget(card)
+        self._vl.addStretch()
 
     def _update_texts(self):
-        """Update texts in-place on language change without rebuilding widgets."""
         for key, widget in self._t.items():
-            if not widget: continue
+            if not widget:
+                continue
             if key.startswith("lang_") and key != "lang_label":
-                # lang_ko / lang_en buttons: update text + checked state
-                lang_code = key[len("lang_"):]   # "ko" or "en"
+                lang_code = key[len("lang_"):]
                 widget.setText(self.T(key))
                 widget.setChecked(self.settings.get("lang", "ko") == lang_code)
             elif key.startswith("theme_"):
                 tname = key[6:]
-                tkey = next((tk for tn,tk in self.THEMES_ORDER if tn == tname), None)
-                if tkey: widget.setText(self.T(tkey))
+                tkey = next((tk for tn, tk in self.THEMES_ORDER if tn == tname), None)
+                if tkey:
+                    widget.setText(self.T(tkey))
             else:
-                widget.setText(self.T(key) if key != "settings_title"
-                                else self.T(key).upper())
+                widget.setText(
+                    self.T(key).upper() if key == "settings_title" else self.T(key))
 
     def _switch_row(self, label: str, key: str, enabled: bool,
                     indent: bool = False) -> tuple:
-        """Return (row_widget, label_widget, toggle_switch). indent=True indents sub-options."""
-        rw = QWidget(); rw.setAttribute(Qt.WA_TranslucentBackground)
+        rw = QWidget()
+        rw.setAttribute(Qt.WA_TranslucentBackground)
+        rw.setCursor(Qt.PointingHandCursor)  # entire row is clickable
         left_margin = 14 if indent else 0
-        rl = QHBoxLayout(rw); rl.setContentsMargins(left_margin, 1, 0, 1); rl.setSpacing(8)
+        rl = QHBoxLayout(rw)
+        rl.setContentsMargins(left_margin, 1, 0, 1)
+        rl.setSpacing(8)
         font_size = 8 if indent else 9
         color = c("t_muted") if indent else c("t_body")
         lbl = ql(label, font_size, color)
