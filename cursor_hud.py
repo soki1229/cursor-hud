@@ -2,16 +2,25 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  CURSOR HUD  v4  ·  Personal Usage Monitor                   ║
-║  3-tab · 4 themes · Live clock · Debug panel · EXE-safe      ║
+║  CURSOR HUD  v4.1  ·  Personal Usage Monitor                 ║
+║  3-tab · 4 themes · Tray · Shortcuts · Debug · EXE-safe      ║
 ╚══════════════════════════════════════════════════════════════╝
 Build EXE:
   pip install pyqt5 requests pyinstaller
   python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 """
 
-import sys, os, sqlite3, shutil, logging, tempfile, base64, json, math
-from datetime import datetime, timezone
+import sys
+import os
+import sqlite3
+import shutil
+import logging
+import tempfile
+import base64
+import json
+import math
+import datetime as _dt
+from datetime import datetime, timezone, date as _date
 from pathlib import Path
 
 import requests
@@ -19,20 +28,20 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QStackedWidget,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QMessageBox, QSizePolicy,
-    QTextEdit, QDialog,
+    QTextEdit, QDialog, QTabWidget, QSystemTrayIcon, QMenu, QAction,
+    QShortcut,
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QPointF, QSize, qInstallMessageHandler
 from PyQt5.QtGui import (
-    QColor, QPainter, QBrush, QPen, QPainterPath,
-    QLinearGradient, QRadialGradient, QFont, QScreen,
+    QColor, QPainter, QBrush, QPen, QPainterPath, QPixmap, QIcon,
+    QLinearGradient, QRadialGradient, QFont, QScreen, QKeySequence,
 )
 
 # ══════════════════════════════════════════════════════════════
 #  EXE-SAFE PATHS
-#  EXE: directory next to sys.executable / py: directory next to script
 # ══════════════════════════════════════════════════════════════
 def _app_dir() -> Path:
-    if getattr(sys, "frozen", False):       # PyInstaller EXE
+    if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).parent
 
@@ -41,7 +50,7 @@ SETTINGS_FILE = APP_DIR / "cursor_hud_settings.json"
 LOG_FILE      = APP_DIR / "cursor_hud.log"
 
 # ══════════════════════════════════════════════════════════════
-#  LOGGING  — app continues even if file write fails
+#  LOGGING
 # ══════════════════════════════════════════════════════════════
 _log_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 try:
@@ -56,20 +65,46 @@ logging.basicConfig(
 )
 log = logging.getLogger("CursorHUD")
 
-# ── in-memory log buffer (for debug panel) ──────────────────────
+
 class _MemHandler(logging.Handler):
     MAX = 300
+
     def __init__(self):
         super().__init__()
         self.records: list[str] = []
         self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
     def emit(self, record):
         self.records.append(self.format(record))
         if len(self.records) > self.MAX:
             self.records = self.records[-self.MAX:]
 
+
 _mem_log = _MemHandler()
 logging.getLogger("CursorHUD").addHandler(_mem_log)
+
+# ══════════════════════════════════════════════════════════════
+#  USAGE METRICS (local-only event counters for UX analysis)
+# ══════════════════════════════════════════════════════════════
+class _UsageMetrics:
+    """Simple in-memory event counters — never sent to any server."""
+
+    def __init__(self):
+        self.session_start = datetime.now()
+        self._counts: dict[str, int] = {}
+
+    def inc(self, event: str):
+        self._counts[event] = self._counts.get(event, 0) + 1
+
+    def dump(self) -> str:
+        elapsed = (datetime.now() - self.session_start).total_seconds()
+        lines = [f"Session: {elapsed:.0f}s"]
+        for k, v in sorted(self._counts.items()):
+            lines.append(f"  {k}: {v}")
+        return "\n".join(lines)
+
+
+_metrics = _UsageMetrics()
 
 # ══════════════════════════════════════════════════════════════
 #  THEME SYSTEM
@@ -77,80 +112,137 @@ logging.getLogger("CursorHUD").addHandler(_mem_log)
 THEMES: dict[str, dict] = {
     "dark": {
         "name": "dark",
-        "bg_win":  (10, 12, 24), "bg_win2": ( 5,  7, 16), "bg_card": (13, 16, 28),
-        "accent":  ( 0,220,255), "accent2": (130, 80,255),
-        "c_green": (  0,240,140),"c_amber": (255,185, 50), "c_red":   (255, 70, 90),
-        "t_bright":(230,240,255),"t_body":  (170,185,215),
-        "t_muted": ( 90,110,150),"t_dim":   ( 50, 65, 95),
-        "border_lo":(255,255,255,18), "border_hi":(0,220,255,45),
-        "scrollbar":"rgba(0,220,255,0.22)", "hatch_alpha":38, "track_bg":(255,255,255,30),
+        "bg_win": (10, 12, 24), "bg_win2": (5, 7, 16), "bg_card": (13, 16, 28),
+        "accent": (0, 220, 255), "accent2": (130, 80, 255),
+        "c_green": (0, 240, 140), "c_amber": (255, 185, 50), "c_red": (255, 70, 90),
+        "t_bright": (230, 240, 255), "t_body": (170, 185, 215),
+        "t_muted": (90, 110, 150), "t_dim": (50, 65, 95),
+        "border_lo": (255, 255, 255, 18), "border_hi": (0, 220, 255, 45),
+        "scrollbar": "rgba(0,220,255,0.22)", "hatch_alpha": 38,
+        "track_bg": (255, 255, 255, 30),
     },
     "light": {
         "name": "light",
-        "bg_win":  (240,244,255),"bg_win2": (225,232,248),"bg_card": (255,255,255),
-        "accent":  (  0,145,200),"accent2": (100, 55,210),
-        "c_green": (  0,170, 90),"c_amber": (200,130,  0),"c_red":   (210, 40, 60),
-        "t_bright":(15,  20, 45),"t_body":  ( 55, 70,110),
-        "t_muted": (130,145,180),"t_dim":   (185,195,220),
-        "border_lo":(0,0,0,20),  "border_hi":(0,145,200,60),
-        "scrollbar":"rgba(0,145,200,0.30)", "hatch_alpha":55, "track_bg":(0,0,0,22),
+        "bg_win": (240, 244, 255), "bg_win2": (225, 232, 248), "bg_card": (255, 255, 255),
+        "accent": (0, 145, 200), "accent2": (100, 55, 210),
+        "c_green": (0, 170, 90), "c_amber": (200, 130, 0), "c_red": (210, 40, 60),
+        "t_bright": (15, 20, 45), "t_body": (55, 70, 110),
+        "t_muted": (130, 145, 180), "t_dim": (185, 195, 220),
+        "border_lo": (0, 0, 0, 20), "border_hi": (0, 145, 200, 60),
+        "scrollbar": "rgba(0,145,200,0.30)", "hatch_alpha": 55,
+        "track_bg": (0, 0, 0, 22),
     },
     "midnight": {
         "name": "midnight",
-        "bg_win":  ( 6,  4, 18),"bg_win2": ( 2,  1,  9),"bg_card": (12,  8, 28),
-        "accent":  (160, 80,255),"accent2": (255, 60,160),
-        "c_green": (  0,220,120),"c_amber": (255,160, 40),"c_red":   (255, 50, 80),
-        "t_bright":(240,230,255),"t_body":  (185,165,220),
-        "t_muted": (100, 80,145),"t_dim":   ( 55, 40, 90),
-        "border_lo":(255,255,255,14),"border_hi":(160,80,255,55),
-        "scrollbar":"rgba(160,80,255,0.28)", "hatch_alpha":35, "track_bg":(255,255,255,24),
+        "bg_win": (6, 4, 18), "bg_win2": (2, 1, 9), "bg_card": (12, 8, 28),
+        "accent": (160, 80, 255), "accent2": (255, 60, 160),
+        "c_green": (0, 220, 120), "c_amber": (255, 160, 40), "c_red": (255, 50, 80),
+        "t_bright": (240, 230, 255), "t_body": (185, 165, 220),
+        "t_muted": (100, 80, 145), "t_dim": (55, 40, 90),
+        "border_lo": (255, 255, 255, 14), "border_hi": (160, 80, 255, 55),
+        "scrollbar": "rgba(160,80,255,0.28)", "hatch_alpha": 35,
+        "track_bg": (255, 255, 255, 24),
     },
     "matrix": {
         "name": "matrix",
-        "bg_win":  ( 0,  8,  0),"bg_win2": ( 0,  4,  0),"bg_card": ( 0, 14,  0),
-        "accent":  ( 0,255, 70),"accent2": ( 0,200, 50),
-        "c_green": (  0,255, 70),"c_amber": (180,255,  0),"c_red":   (255,100,  0),
-        "t_bright":(200,255,200),"t_body":  (100,200,100),
-        "t_muted": ( 40,110, 40),"t_dim":   ( 20, 55, 20),
-        "border_lo":(0,255,70,16),"border_hi":(0,255,70,50),
-        "scrollbar":"rgba(0,255,70,0.25)", "hatch_alpha":30, "track_bg":(0,255,70,22),
+        "bg_win": (0, 8, 0), "bg_win2": (0, 4, 0), "bg_card": (0, 14, 0),
+        "accent": (0, 255, 70), "accent2": (0, 200, 50),
+        "c_green": (0, 255, 70), "c_amber": (180, 255, 0), "c_red": (255, 100, 0),
+        "t_bright": (200, 255, 200), "t_body": (100, 200, 100),
+        "t_muted": (40, 110, 40), "t_dim": (20, 55, 20),
+        "border_lo": (0, 255, 70, 16), "border_hi": (0, 255, 70, 50),
+        "scrollbar": "rgba(0,255,70,0.25)", "hatch_alpha": 30,
+        "track_bg": (0, 255, 70, 22),
     },
 }
 
 _THEME: dict = THEMES["dark"]
 
-def TH() -> dict: return _THEME
+
+def TH() -> dict:
+    return _THEME
+
 
 def c(key: str) -> QColor:
     v = _THEME.get(key)
-    if v is None or isinstance(v, str): return QColor()   # guard against string keys (e.g. scrollbar)
+    if v is None:
+        log.warning("Unknown theme key: %s", key)
+        return QColor(255, 0, 255)  # magenta = obvious debug indicator
+    if isinstance(v, str):
+        return QColor()
     return QColor(*v) if len(v) == 3 else QColor(v[0], v[1], v[2], v[3])
+
 
 def apply_theme(name: str):
     global _THEME
     _THEME = THEMES.get(name, THEMES["dark"])
 
+
 def hatch_alpha() -> int:
     return _THEME.get("hatch_alpha", 38)
 
+
 def track_bg() -> QColor:
-    """Background fill color for empty gauge/bar tracks."""
     v = _THEME.get("track_bg", (255, 255, 255, 28))
     return QColor(v[0], v[1], v[2], v[3])
+
+
+# ══════════════════════════════════════════════════════════════
+#  QSS HELPERS  — deduplicated style generators
+# ══════════════════════════════════════════════════════════════
+def _icon_btn_qss(fg: str = None, hv: str = None, sz: int = 11) -> str:
+    """Minimal icon-style button (no bg, no border)."""
+    fg = fg or c("t_muted").name()
+    hv = hv or c("t_bright").name()
+    return (
+        f"QPushButton{{color:{fg};background:transparent;"
+        f"border:none;font-size:{sz}px;}}"
+        f"QPushButton:hover{{color:{hv};}}"
+    )
+
+
+def _pill_btn_qss(active_color: str = None) -> str:
+    """Small pill button with border (language / debug / refresh)."""
+    mu = c("t_muted").name()
+    ac = active_color or c("accent").name()
+    return (
+        f"QPushButton{{ color:{mu}; background:transparent;"
+        f" border:1px solid rgba(128,128,128,0.28); border-radius:3px;"
+        f" font-size:9px; padding:1px 12px; font-family:Segoe UI; font-weight:600; }}"
+        f" QPushButton:checked{{ color:{ac}; border:1px solid {ac};"
+        f" background:rgba(128,128,128,0.10); }}"
+    )
+
+
+def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
+    av = theme["accent"]
+    ac_hex = QColor(*av).name()
+    bg_hex = QColor(*theme["bg_card"]).name()
+    mu = c("t_muted").name()
+    return (
+        f"QPushButton{{ color:{mu}; background:{bg_hex};"
+        f" border:1px solid rgba(128,128,128,0.25); border-radius:5px;"
+        f" font-size:9px; font-family:Segoe UI; font-weight:600; }}"
+        f" QPushButton:checked{{ color:{ac_hex}; border:2px solid {ac_hex};"
+        f" background:rgba({av[0]},{av[1]},{av[2]},25); }}"
+        f" QPushButton:hover{{ border:1px solid rgba(128,128,128,0.50); }}"
+        f" QPushButton:checked:hover{{ border:2px solid {ac_hex}; }}"
+    )
+
 
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-BASE_URL     = "https://cursor.com"
-WIN_W     = 400  # minimum window width (base for scale=1.0)
-WIN_W_MAX = 500  # maximum window width
+BASE_URL  = "https://cursor.com"
+WIN_W     = 400
+WIN_W_MAX = 500
 WIN_H     = 660
-ARC_MIN_W = 240  # minimum window width to fully display arc
+ARC_MIN_W = 240
+
 
 def _preset_win_w(screen=None) -> int:
-    """All screen resolutions share the same minimum width (400).
-    Responsive scaling kicks in as the user widens the window."""
     return WIN_W
+
 
 try:
     REFRESH_MS = max(5000, int(os.environ.get("CURSOR_REFRESH_MS", "60000")))
