@@ -1326,96 +1326,68 @@ class CreditsPage(QWidget):
             f"color:{amber.name()};"
             f"background:rgba({amber.red()},{amber.green()},{amber.blue()},22);"
             f"border:1px solid rgba({amber.red()},{amber.green()},{amber.blue()},70);"
-            "border-radius:5px;"
-            "font-size:10px;font-family:Segoe UI;font-weight:700;"
+            "border-radius:5px;font-size:10px;font-family:Segoe UI;font-weight:700;"
             "padding:0 8px;"
         )
 
-    @staticmethod
-    def _credit_tag_qss(color: QColor, active: bool) -> str:
-        """Credit status pill QSS — active: colored highlight / inactive: muted."""
-        if active:
-            return (
-                f"color:{color.name()};"
-                f"background:rgba({color.red()},{color.green()},{color.blue()},22);"
-                f"border:1px solid rgba({color.red()},{color.green()},{color.blue()},70);"
-                "border-radius:5px;"
-                "font-size:9px;font-family:Segoe UI;font-weight:700;"
-                "padding:0 4px;"
-            )
-        else:
-            muted = c("t_dim")
-            return (
-                f"color:{muted.name()};"
-                "background:transparent;"
-                f"border:1px solid rgba({muted.red()},{muted.green()},{muted.blue()},40);"
-                "border-radius:5px;"
-                "font-size:9px;font-family:Segoe UI;font-weight:400;"
-                "padding:0 4px;"
-            )
-
     def set_error(self, msg: str):
-        if msg: self._err_lbl.setText(f"⚠  {msg}"); self._err_lbl.show()
-        else:   self._err_lbl.hide()
+        if msg:
+            self._err_lbl.setText(f"⚠  {msg}")
+            self._err_row.show()
+        else:
+            self._err_row.hide()
 
     def refresh_theme(self):
-        """Re-apply all colors that were baked in at widget creation time when the theme changes."""
-        # error / hint
-        set_lbl_color(self._err_lbl,   c("c_red"))
-        set_lbl_color(self._hint_lbl,        c("t_muted"))
+        set_lbl_color(self._err_lbl, c("c_red"))
+        set_lbl_color(self._hint_lbl, c("t_muted"))
         set_lbl_color(self._free_notice_lbl, c("t_muted"))
-        # Hero — pct keeps accent color when no data
-        # re-apply arc label color with current theme accent
         self._arc.set_label(self._arc._label_text, c("accent"))
         set_lbl_color(self._hero_used, c("t_bright"))
         set_lbl_color(self._hero_of,   c("t_muted"))
         set_lbl_color(self._cycle_lbl, c("t_dim"))
-        # Section headers
         set_lbl_color(self._hdr_personal, c("accent"))
         set_lbl_color(self._hdr_org,      c("c_green"))
         set_lbl_color(self._hdr_rates,    c("accent2"))
-        # All kv_rows: re-apply initial colors label(t_muted) + value(t_bright)
-        # (safe: overwritten by update_data if present)
         for row in self._row_refs.values():
             lw, vw = row
             set_lbl_color(lw, c("t_muted"))
             set_lbl_color(vw, c("t_bright"))
-        # re-apply bonus tag style (only when visible)
         if self._bonus_tag.isVisible():
             self._bonus_tag.setStyleSheet(self._bonus_tag_qss())
+        self._retry_btn.setStyleSheet(_pill_btn_qss(c("c_red").name()))
 
     def apply_scale(self, scale: float, arc_size: int = None):
-        """Dynamically adjust fonts and margins based on width scale (base=1.0 at 400px)."""
-        # Hero fonts (amount + denominator — % label is drawn inside arc)
-        self._hero_used.setFont(QFont("Segoe UI", max(8,  int(11 * scale)), QFont.Bold))
-        self._hero_of.setFont(QFont("Segoe UI",   max(7,  int(9  * scale))))
-        self._cycle_lbl.setFont(QFont("Segoe UI", max(7,  int(8  * scale))))
-        # KV row fonts (label + value)
+        self._hero_used.setFont(QFont("Segoe UI", max(8, int(11 * scale)), QFont.Bold))
+        self._hero_of.setFont(QFont("Segoe UI", max(7, int(9 * scale))))
+        self._cycle_lbl.setFont(QFont("Segoe UI", max(7, int(8 * scale))))
         kv_px = max(7, int(9 * scale))
         for lw, vw in self._row_refs.values():
             vw.setFont(QFont("Segoe UI", kv_px, QFont.Bold))
             lw.setFont(QFont("Segoe UI", kv_px))
-        # Section headers
         sec_px = max(7, int(8 * scale))
         for hdr in [self._hdr_personal, self._hdr_org, self._hdr_rates]:
-            f = hdr.font(); f.setPointSize(sec_px); hdr.setFont(f)
-        # Arc size
+            f = hdr.font()
+            f.setPointSize(sec_px)
+            hdr.setFont(f)
         if arc_size is None:
             arc_size = max(90, int(150 * scale))
         pad = ArcGauge._GLOW_PAD
-        self._arc.setFixedSize(arc_size + pad * 2, arc_size // 2 + pad + 6)
+        self._arc.setFixedSize(arc_size + pad * 2, arc_size // 2 + pad + 10)
         self._arc.resize_arcs(arc_size // 2 - 8)
 
     def update_data(self, d: dict):
-        cr = d["credit"]; od = d["on_demand"]; cyc = d["cycle"]; cfg = self.settings
+        cr = d["credit"]
+        od = d["on_demand"]
+        cyc = d["cycle"]
+        cfg = self.settings
         self._rebuild_labels()
 
-        # Free plan: show FREE in the % position, hide amount labels
         if d.get("is_free"):
             self._arc.set_value(0, c("t_muted"))
             self._arc.set_bonus(None)
             self._arc.set_label("FREE", c("accent"))
-            self._hero_used.hide(); self._hero_of.hide()
+            self._hero_used.hide()
+            self._hero_of.hide()
             _lang = self.settings.get("lang", "ko")
             self._cycle_lbl.setText(days_left_text(cyc["end"], _lang))
             mu = c("t_dim").name()
@@ -1424,7 +1396,8 @@ class CreditsPage(QWidget):
                 f"color:{mu};background:transparent;"
                 "font-size:10px;font-family:Segoe UI;font-weight:700;"
             )
-            self._org_card.hide(); self._rate_card.hide()
+            self._org_card.hide()
+            self._rate_card.hide()
             self._personal_card.setVisible(cfg.get("show_personal", True))
             self._free_notice_lbl.setText(self.T("free_plan_notice"))
             self._free_notice_lbl.show()
@@ -1433,18 +1406,52 @@ class CreditsPage(QWidget):
             return
 
         self._free_notice_lbl.hide()
-        self._hero_used.show(); self._hero_of.show()
+        self._hero_used.show()
+        self._hero_of.show()
 
-        # Hero — outer arc: plan (included) remaining
-        incl_remain_pct = cr["incl_remain_pct"]; hc = remain_color(incl_remain_pct)
-        self._arc.set_value(incl_remain_pct, hc)
-        self._arc.set_label(f"{incl_remain_pct:.1f}%", hc)
-        self._hero_used.setText(usd(cr["budget_remain"]))
-        self._hero_of.setText(f"/ {usd(cr['budget_total'])}  {self.T('remain_label')}")
+        incl_remain_pct = cr["incl_remain_pct"]
+        bonus_used = cr["bonus_used"]
         _lang = self.settings.get("lang", "ko")
+
+        # ── Arc + Hero: 3-phase credit display ────────────────────────
+        # Priority order (highest = most urgent for user):
+        #   Phase 3: On-Demand active (real money!) → red, PAYG label
+        #   Phase 2: base exhausted + bonus active  → amber, BONUS label
+        #   Phase 1: base credits remaining          → normal % display
+        base_exhausted = incl_remain_pct <= 0
+        bonus_active   = bonus_used > 0
+        od_active      = od["personal"] > 0
+
+        if base_exhausted and od_active:
+            # Phase 3: On-Demand — real charges, highest priority
+            rc = c("c_red")
+            self._arc.set_value(0, rc)
+            self._arc.set_label("PAYG", rc)
+            self._hero_used.setText(usd(od["personal"]))
+            set_lbl_color(self._hero_used, rc)
+            self._hero_of.setText(self.T("personal_od"))
+        elif base_exhausted and bonus_active:
+            # Phase 2: Bonus mode — free coverage, amber
+            bc = c("c_amber")
+            self._arc.set_value(0, bc)
+            self._arc.set_label("BONUS", bc)
+            self._hero_used.setText(usd(bonus_used))
+            set_lbl_color(self._hero_used, bc)
+            self._hero_of.setText(self.T("bonus_saved"))
+        else:
+            # Phase 1: base credits remaining (or exhausted with nothing active)
+            hc = remain_color(incl_remain_pct)
+            self._arc.set_value(incl_remain_pct, hc)
+            self._arc.set_label(f"{incl_remain_pct:.1f}%", hc)
+            self._hero_used.setText(usd(cr["budget_remain"]))
+            set_lbl_color(self._hero_used, c("t_bright"))
+            self._hero_of.setText(
+                f"/ {usd(cr['budget_total'])}  {self.T('remain_label')}"
+            )
+
         self._cycle_lbl.setText(days_left_text(cyc["end"], _lang))
-        # Bonus saved tag (below arc bar)
-        bonus_used = cr["bonus_used"]  # breakdown.bonus = usage covered for free via bonus
+
+        # Bonus tag (always shown when bonus > 0, regardless of phase)
         if bonus_used > 0:
             self._bonus_tag.setText(f"✦  +{usd(bonus_used)}  {self.T('bonus_saved')}")
             self._bonus_tag.setStyleSheet(self._bonus_tag_qss())
