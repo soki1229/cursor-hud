@@ -1460,9 +1460,8 @@ class CreditsPage(QWidget):
         else:
             self._bonus_tag.setMaximumHeight(0)
             self._bonus_tag.setVisible(False)
-        self._arc.set_bonus(None)  # Disable inner arc (replaced by bonus tag)
+        self._arc.set_bonus(None)
 
-        # ── Credit status badge (shows current active state) ────────────
         active_incl  = cr["incl_remain"] > 0
         active_bonus = cr["bonus_used"]  > 0
         active_od    = od["personal"]    > 0
@@ -1475,47 +1474,42 @@ class CreditsPage(QWidget):
         else:
             badge_text  = self.T("status_badge_incl")
             badge_color = c("accent")
-        ac = badge_color
         self._status_badge.setText(f"● {badge_text}")
         self._status_badge.setStyleSheet(
-            f"color:{ac.name()};"
-            "background:transparent;"
-            "font-size:10px;font-family:Segoe UI;font-weight:700;"
-            "letter-spacing:0.3px;"
+            f"color:{badge_color.name()};background:transparent;"
+            "font-size:10px;font-family:Segoe UI;font-weight:700;letter-spacing:0.3px;"
         )
 
-        # ── Personal Credits card — 3 breakdown rows ───────────────────
-        show_personal = cfg.get("show_personal", True); self._personal_card.setVisible(show_personal)
+        show_personal = cfg.get("show_personal", True)
+        self._personal_card.setVisible(show_personal)
         if show_personal:
-            # Included plan credits used — directly from plan.used
             set_kv(self._row_refs["row_incl"],
                    usd(cr["incl_used"]),
                    c("accent") if active_incl else c("t_muted"))
-            # Bonus credits used
             set_kv(self._row_refs["row_bonus"],
                    usd(cr["bonus_used"]) if cr["bonus_used"] > 0 else self.T("not_used"),
                    c("c_amber") if active_bonus else c("t_dim"))
-            # On-Demand
             set_kv(self._row_refs["row_extra"],
                    usd(od["personal"]) if od["personal"] > 0 else self.T("not_used"),
                    c("c_red") if active_od else c("t_dim"))
 
-        # Organization Credits card — team on-demand
-        show_org = cfg.get("show_org", True); self._org_card.setVisible(show_org)
+        show_org = cfg.get("show_org", True)
+        self._org_card.setVisible(show_org)
         if show_org:
             set_kv(self._row_refs["od_t"],
                    usd(od["team"]) if od["team"] else "—",
                    c("c_amber") if od["team"] > 0 else c("t_muted"))
 
-        # Usage Rates — visibility controlled by settings toggle only
         show_rate = cfg.get("show_official", True)
         self._rate_card.setVisible(show_rate)
         if show_rate:
-            ap  = cr["auto_pct"]; ac = pct_color(ap)
-            nmp = cr["api_pct"];  nc = pct_color(nmp)
+            ap = cr["auto_pct"]
+            ac = pct_color(ap)
+            nmp = cr["api_pct"]
+            nc = pct_color(nmp)
             set_kv(self._row_refs["auto_pct"], f"{ap:.1f}%", ac)
             self._auto_bar.set_value(ap / 100, ac)
-            set_kv(self._row_refs["api_pct"],  f"{nmp:.1f}%", nc)
+            set_kv(self._row_refs["api_pct"], f"{nmp:.1f}%", nc)
             self._api_bar.set_value(nmp / 100, nc)
             hint = d.get("hint", "")
             if hint:
