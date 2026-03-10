@@ -916,31 +916,34 @@ class Card(QWidget):
         self._accent_key = accent_key
 
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
         r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        p.setBrush(QBrush(c("bg_card"))); p.setPen(QPen(c("border_lo"), 1))
+        p.setBrush(QBrush(c("bg_card")))
+        p.setPen(QPen(c("border_lo"), 1))
         p.drawRoundedRect(r, 10, 10)
         ac = c(self._accent_key)
-        pen = QPen(ac, 1.5); pen.setCapStyle(Qt.RoundCap); p.setPen(pen)
-        p.drawLine(QPointF(r.left()+14, r.top()+0.75),
-                   QPointF(r.left()+56, r.top()+0.75))
+        pen = QPen(ac, 1.5)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        p.drawLine(QPointF(r.left() + 14, r.top() + 0.75),
+                   QPointF(r.left() + 56, r.top() + 0.75))
         p.end()
 
 
 class Divider(QFrame):
     def __init__(self):
         super().__init__()
-        self.setFrameShape(QFrame.HLine); self.setFixedHeight(1)
+        self.setFrameShape(QFrame.HLine)
+        self.setFixedHeight(1)
         self.setStyleSheet("background:rgba(128,128,128,0.15);border:none;")
 
 
 # ══════════════════════════════════════════════════════════════
-#  TOGGLE SWITCH WIDGET
+#  TOGGLE SWITCH  — entire row clickable
 # ══════════════════════════════════════════════════════════════
 class ToggleSwitch(QWidget):
-    """Minimal toggle switch without animation."""
     toggled = pyqtSignal(bool)
-
     W, H = 34, 18
 
     def __init__(self, checked: bool = False):
@@ -963,63 +966,79 @@ class ToggleSwitch(QWidget):
         self.setCursor(Qt.ForbiddenCursor if val else Qt.PointingHandCursor)
         self.update()
 
-    def mousePressEvent(self, _):
-        if self._disabled: return
+    def toggle(self):
+        """Programmatic toggle (called from row click)."""
+        if self._disabled:
+            return
         self._checked = not self._checked
         self.update()
         self.toggled.emit(self._checked)
 
+    def mousePressEvent(self, _):
+        self.toggle()
+
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
         w, h = self.W, self.H
         r = h / 2
-
-        # disabled: reduce overall opacity
         if self._disabled:
             p.setOpacity(0.30)
-
-        # Track
         track_color = c("accent") if self._checked else QColor(128, 128, 128, 60)
-        p.setBrush(QBrush(track_color)); p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(track_color))
+        p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, w, h), r, r)
-
-        # Knob
         knob_r = h / 2 - 2
         knob_x = (w - h + 2 + knob_r) if self._checked else (2 + knob_r)
         knob_y = h / 2
-        p.setBrush(QBrush(QColor(255, 255, 255, 230))); p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor(255, 255, 255, 230)))
         p.drawEllipse(QPointF(knob_x, knob_y), knob_r, knob_r)
         p.end()
+
 
 # ══════════════════════════════════════════════════════════════
 #  KV-ROW FACTORY
 # ══════════════════════════════════════════════════════════════
-KVRow = tuple  # (label_QLabel, value_QLabel)
+KVRow = tuple
+
 
 def kv_row(parent_layout, label: str) -> KVRow:
-    row = QWidget(); row.setAttribute(Qt.WA_TranslucentBackground)
-    rl = QHBoxLayout(row); rl.setContentsMargins(0,1,0,1); rl.setSpacing(4)
+    row = QWidget()
+    row.setAttribute(Qt.WA_TranslucentBackground)
+    rl = QHBoxLayout(row)
+    rl.setContentsMargins(0, 1, 0, 1)
+    rl.setSpacing(4)
     lw = ql(label, 9, c("t_muted"))
     lw.setWordWrap(False)
     lw.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     vw = QLabel("—")
     vw.setFont(QFont("Segoe UI", 9, QFont.Bold))
     vw.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-    vw.setWordWrap(False); vw.setTextInteractionFlags(Qt.NoTextInteraction)
-    vw.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed); vw.setMinimumWidth(0)
+    vw.setWordWrap(False)
+    vw.setTextInteractionFlags(Qt.NoTextInteraction)
+    vw.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    vw.setMinimumWidth(0)
     col = c("t_bright")
-    vw.setStyleSheet(f"color:rgba({col.red()},{col.green()},{col.blue()},255);background:transparent;")
-    rl.addWidget(lw, 0); rl.addWidget(vw, 1)
+    vw.setStyleSheet(
+        f"color:rgba({col.red()},{col.green()},{col.blue()},255);background:transparent;"
+    )
+    rl.addWidget(lw, 0)
+    rl.addWidget(vw, 1)
     parent_layout.addWidget(row)
     return lw, vw
 
+
 def set_kv(row: KVRow, value: str, color: QColor = None):
-    _, vw = row; vw.setText(value)
+    _, vw = row
+    vw.setText(value)
     set_lbl_color(vw, color or c("t_bright"))
 
+
 def update_kv_label(row: KVRow, label: str):
-    lw, _ = row; lw.setText(label)
+    lw, _ = row
+    lw.setText(label)
     set_lbl_color(lw, c("t_muted"))
+
 
 def section_hdr(text: str, accent_key: str = "t_muted") -> QLabel:
     w = ql(text.upper(), 8, c(accent_key), bold=True)
@@ -1027,6 +1046,7 @@ def section_hdr(text: str, accent_key: str = "t_muted") -> QLabel:
     w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     w.setStyleSheet(w.styleSheet() + "letter-spacing:1.5px;")
     return w
+
 
 # ══════════════════════════════════════════════════════════════
 #  DEBUG DIALOG
@@ -1039,39 +1059,45 @@ class DebugDialog(QDialog):
         self.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint)
         self.resize(600, 500)
         self.setStyleSheet(
-            f"background:{c('bg_win').name()}; color:{c('t_body').name()};"
+            f"background:{c('bg_win').name()};color:{c('t_body').name()};"
         )
-        vl = QVBoxLayout(self); vl.setContentsMargins(12,12,12,10); vl.setSpacing(8)
+        vl = QVBoxLayout(self)
+        vl.setContentsMargins(12, 12, 12, 10)
+        vl.setSpacing(8)
 
         for line in [
-            f"CursorHUD  ·  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"CursorHUD v4.1  ·  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"Python {sys.version.split()[0]}  ·  "
-            f"{'EXE (frozen)' if getattr(sys,'frozen',False) else 'Script'}",
+            f"{'EXE (frozen)' if getattr(sys, 'frozen', False) else 'Script'}",
             f"Log → {LOG_FILE}",
             f"Settings → {SETTINGS_FILE}",
             f"Cursor DB → {_cursor_db_path()}",
         ]:
-            lb = QLabel(line); lb.setFont(QFont("Consolas", 8))
+            lb = QLabel(line)
+            lb.setFont(QFont("Consolas", 8))
             lb.setStyleSheet(f"color:{c('t_muted').name()};background:transparent;")
             vl.addWidget(lb)
 
         vl.addWidget(Divider())
 
-        from PyQt5.QtWidgets import QTabWidget
         tabs = QTabWidget()
-        tabs.setStyleSheet(f"""
-            QTabWidget::pane{{border:none;}}
-            QTabBar::tab{{background:rgba(128,128,128,0.08);color:{c("t_muted").name()};
-                border:1px solid rgba(128,128,128,0.2);border-radius:4px 4px 0 0;
-                padding:3px 14px;font-size:9px;margin-right:2px;}}
-            QTabBar::tab:selected{{background:{c("accent").name()};color:#fff;border-color:{c("accent").name()};}}
-        """)
+        tabs.setStyleSheet(
+            f"QTabWidget::pane{{ border:none; }}"
+            f" QTabBar::tab{{ background:rgba(128,128,128,0.08); color:{c('t_muted').name()};"
+            f" border:1px solid rgba(128,128,128,0.2); border-radius:4px 4px 0 0;"
+            f" padding:3px 14px; font-size:9px; margin-right:2px; }}"
+            f" QTabBar::tab:selected{{ background:{c('accent').name()}; color:#fff;"
+            f" border-color:{c('accent').name()}; }}"
+        )
 
         def _make_text(content: str) -> QTextEdit:
-            t = QTextEdit(); t.setReadOnly(True); t.setFont(QFont("Consolas", 8))
+            t = QTextEdit()
+            t.setReadOnly(True)
+            t.setFont(QFont("Consolas", 8))
             t.setStyleSheet(
                 f"background:{c('bg_card').name()};color:{c('t_body').name()};"
-                "border:none;border-radius:6px;padding:6px;")
+                "border:none;border-radius:6px;padding:6px;"
+            )
             t.setPlainText(content)
             t.verticalScrollBar().setValue(t.verticalScrollBar().maximum())
             return t
@@ -1079,30 +1105,54 @@ class DebugDialog(QDialog):
         self._log_txt = _make_text("\n".join(_mem_log.records) or "(no logs)")
         tabs.addTab(self._log_txt, "Logs")
 
-        json_str = json.dumps(raw_json, indent=2, ensure_ascii=False) if raw_json else "(no data yet)"
+        # Redact sensitive fields from JSON display
+        json_display = raw_json
+        if raw_json:
+            json_display = dict(raw_json)
+            if "profile" in json_display and isinstance(json_display["profile"], dict):
+                safe_profile = dict(json_display["profile"])
+                for k in ("email", "cursorAuth"):
+                    if k in safe_profile:
+                        safe_profile[k] = "[REDACTED]"
+                json_display["profile"] = safe_profile
+            if "email" in json_display:
+                json_display["email"] = "[REDACTED]"
+        json_str = (json.dumps(json_display, indent=2, ensure_ascii=False)
+                    if json_display else "(no data yet)")
         self._json_txt = _make_text(json_str)
         tabs.addTab(self._json_txt, "JSON")
+
+        # Metrics tab
+        self._metrics_txt = _make_text(_metrics.dump())
+        tabs.addTab(self._metrics_txt, "Metrics")
 
         self._tabs = tabs
         vl.addWidget(tabs, 1)
 
-        br = QWidget(); bl = QHBoxLayout(br); bl.setContentsMargins(0,0,0,0); bl.setSpacing(6)
+        br = QWidget()
+        bl = QHBoxLayout(br)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.setSpacing(6)
         bl.addStretch()
         for lkey, slot in [("debug_copy", self._copy), ("debug_close", self.accept)]:
-            btn = QPushButton(S(settings, lkey)); btn.setFixedHeight(26)
-            ac = c("accent").name(); mu = c("t_muted").name()
-            btn.setStyleSheet(f"QPushButton{{color:{mu};background:rgba(128,128,128,0.08);border:1px solid rgba(128,128,128,0.25);border-radius:4px;font-size:9px;padding:0 12px;}}QPushButton:hover{{color:{ac};border-color:{ac};}}")
-            btn.clicked.connect(slot); bl.addWidget(btn)
+            btn = QPushButton(S(settings, lkey))
+            btn.setFixedHeight(26)
+            btn.setStyleSheet(_pill_btn_qss())
+            btn.clicked.connect(slot)
+            bl.addWidget(btn)
         vl.addWidget(br)
 
     def _copy(self):
         cur = self._tabs.currentWidget()
         QApplication.clipboard().setText(cur.toPlainText() if cur else "")
 
+
 # ══════════════════════════════════════════════════════════════
 #  PAGE: CREDITS
 # ══════════════════════════════════════════════════════════════
 class CreditsPage(QWidget):
+    retry_clicked = pyqtSignal()
+
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -1110,97 +1160,146 @@ class CreditsPage(QWidget):
         self._row_refs: dict[str, KVRow] = {}
         self._build()
 
-    def T(self, k): return S(self.settings, k)
+    def T(self, k):
+        return S(self.settings, k)
 
     def _build(self):
-        outer = QVBoxLayout(self); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
-        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setStyleSheet("background:transparent;")
         scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        inner = QWidget(); inner.setAttribute(Qt.WA_TranslucentBackground)
+        inner = QWidget()
+        inner.setAttribute(Qt.WA_TranslucentBackground)
         inner.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         inner.setMinimumWidth(0)
-        vl = QVBoxLayout(inner); vl.setContentsMargins(12,8,12,8); vl.setSpacing(8)
-        scroll.setWidget(inner); outer.addWidget(scroll)
+        vl = QVBoxLayout(inner)
+        vl.setContentsMargins(12, 8, 12, 8)
+        vl.setSpacing(8)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
-        self._err_lbl = ql("", 9, c("c_red")); self._err_lbl.setWordWrap(True)
-        self._err_lbl.hide()
-        ew = QVBoxLayout(); ew.setContentsMargins(12,0,12,0); ew.addWidget(self._err_lbl)
-        outer.addLayout(ew)
+        # Error bar with retry button
+        err_row = QWidget()
+        err_row.setAttribute(Qt.WA_TranslucentBackground)
+        erl = QHBoxLayout(err_row)
+        erl.setContentsMargins(12, 0, 12, 0)
+        erl.setSpacing(6)
+        self._err_lbl = ql("", 9, c("c_red"))
+        self._err_lbl.setWordWrap(True)
+        erl.addWidget(self._err_lbl, 1)
+        self._retry_btn = QPushButton(self.T("err_retry"))
+        self._retry_btn.setFixedHeight(22)
+        self._retry_btn.setCursor(Qt.PointingHandCursor)
+        self._retry_btn.setStyleSheet(_pill_btn_qss(c("c_red").name()))
+        self._retry_btn.clicked.connect(self.retry_clicked)
+        erl.addWidget(self._retry_btn)
+        self._err_row = err_row
+        err_row.hide()
+        outer.addWidget(err_row)
 
         # Hero card
-        hero = Card("accent"); hl = QHBoxLayout(hero); hl.setContentsMargins(14,8,14,8); hl.setSpacing(8)
-        self._arc = ArcGauge(size=150); self._arc.setFixedSize(150, 78)
-        # container: arc + bonus tag stacked vertically
-        arc_col = QWidget(); arc_col.setAttribute(Qt.WA_TranslucentBackground)
+        hero = Card("accent")
+        hl = QHBoxLayout(hero)
+        hl.setContentsMargins(14, 8, 14, 8)
+        hl.setSpacing(8)
+        self._arc = ArcGauge(size=150)
+        # Size is set by ArcGauge.__init__ based on GLOW_PAD
+        arc_col = QWidget()
+        arc_col.setAttribute(Qt.WA_TranslucentBackground)
         arc_col.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
-        acl = QVBoxLayout(arc_col); acl.setContentsMargins(0,0,0,0); acl.setSpacing(0)
+        acl = QVBoxLayout(arc_col)
+        acl.setContentsMargins(0, 0, 0, 0)
+        acl.setSpacing(0)
         acl.addWidget(self._arc)
-        # Bonus saved tag — shown only when bonus>0 (height=0 when hidden to avoid empty space)
         self._bonus_tag = QLabel("")
         self._bonus_tag.setAlignment(Qt.AlignCenter)
         self._bonus_tag.setMaximumHeight(0)
         self._bonus_tag.setVisible(False)
         acl.addWidget(self._bonus_tag)
         hl.addWidget(arc_col, 0)
-        info = QWidget(); info.setAttribute(Qt.WA_TranslucentBackground)
-        il = QVBoxLayout(info); il.setContentsMargins(0,0,0,0); il.setSpacing(2)
+        info = QWidget()
+        info.setAttribute(Qt.WA_TranslucentBackground)
+        il = QVBoxLayout(info)
+        il.setContentsMargins(0, 0, 0, 0)
+        il.setSpacing(2)
         il.setAlignment(Qt.AlignVCenter)
-        # percentage label is drawn inside the arc via ArcGauge.set_label()
-        self._hero_used = ql("$—",  11, c("t_bright"), bold=True)
+        self._hero_used = ql("$—", 11, c("t_bright"), bold=True)
         self._hero_of   = ql("/ $—", 9, c("t_muted"))
-        self._cycle_lbl = ql("",     8, c("t_dim"))
+        self._cycle_lbl = ql("", 8, c("t_dim"))
         for _lbl in [self._hero_used, self._hero_of, self._cycle_lbl]:
             _lbl.setWordWrap(False)
             _lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        # Current billing status badge — placed naturally at bottom-right of hero
         self._status_badge = QLabel("")
         self._status_badge.setFixedHeight(20)
         self._status_badge.setWordWrap(False)
         self._status_badge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         for w in [self._hero_used, self._hero_of, self._cycle_lbl, self._status_badge]:
             il.addWidget(w)
-        self._free_notice_lbl = ql("", 8, c("t_muted")); self._free_notice_lbl.setWordWrap(True)
+        self._free_notice_lbl = ql("", 8, c("t_muted"))
+        self._free_notice_lbl.setWordWrap(True)
         self._free_notice_lbl.hide()
         il.addWidget(self._free_notice_lbl)
-        hl.addWidget(info, 1); vl.addWidget(hero)
+        hl.addWidget(info, 1)
+        vl.addWidget(hero)
 
-        # ── Personal Credits card ──────────────────────────────────────
-        self._personal_card = pc = Card("accent"); pl = QVBoxLayout(pc); pl.setContentsMargins(14,11,14,11); pl.setSpacing(6)
+        # Personal Credits card
+        self._personal_card = pc = Card("accent")
+        pl = QVBoxLayout(pc)
+        pl.setContentsMargins(14, 11, 14, 11)
+        pl.setSpacing(6)
         self._hdr_personal = section_hdr(self.T("personal_section"), "accent")
-        pl.addWidget(self._hdr_personal); pl.addWidget(Divider())
-        # 3 breakdown rows: included / bonus / on-demand
+        pl.addWidget(self._hdr_personal)
+        pl.addWidget(Divider())
         self._row_refs["row_incl"]  = kv_row(pl, self.T("row_incl"))
         self._row_refs["row_bonus"] = kv_row(pl, self.T("row_bonus"))
         self._row_refs["row_extra"] = kv_row(pl, self.T("row_extra"))
         vl.addWidget(pc)
 
-        # ── Organization Credits card ──────────────────────────────────
-        self._org_card = Card("c_green"); ogl = QVBoxLayout(self._org_card); ogl.setContentsMargins(14,6,14,8); ogl.setSpacing(3)
+        # Organization Credits card
+        self._org_card = Card("c_green")
+        ogl = QVBoxLayout(self._org_card)
+        ogl.setContentsMargins(14, 6, 14, 8)
+        ogl.setSpacing(3)
         self._hdr_org = section_hdr(self.T("org_section"), "c_green")
-        ogl.addWidget(self._hdr_org); ogl.addWidget(Divider())
+        ogl.addWidget(self._hdr_org)
+        ogl.addWidget(Divider())
         self._row_refs["od_t"] = kv_row(ogl, self.T("org_od"))
         vl.addWidget(self._org_card)
 
-        # Usage rates card (Pro/Ultra only — hidden for Team plan)
-        self._rate_card = Card("accent2"); rl2 = QVBoxLayout(self._rate_card); rl2.setContentsMargins(14,11,14,11); rl2.setSpacing(5)
+        # Usage rates card
+        self._rate_card = Card("accent2")
+        rl2 = QVBoxLayout(self._rate_card)
+        rl2.setContentsMargins(14, 11, 14, 11)
+        rl2.setSpacing(5)
         self._hdr_rates = section_hdr("USAGE RATES", "accent2")
-        rl2.addWidget(self._hdr_rates); rl2.addWidget(Divider())
-        # Auto row
-        self._auto_w = QWidget(); self._auto_w.setAttribute(Qt.WA_TranslucentBackground)
-        awl = QVBoxLayout(self._auto_w); awl.setContentsMargins(0,0,0,0); awl.setSpacing(3)
+        rl2.addWidget(self._hdr_rates)
+        rl2.addWidget(Divider())
+        self._auto_w = QWidget()
+        self._auto_w.setAttribute(Qt.WA_TranslucentBackground)
+        awl = QVBoxLayout(self._auto_w)
+        awl.setContentsMargins(0, 0, 0, 0)
+        awl.setSpacing(3)
         self._row_refs["auto_pct"] = kv_row(awl, self.T("auto_pct"))
-        self._auto_bar = MiniBar(h=4); awl.addWidget(self._auto_bar); rl2.addWidget(self._auto_w)
-        # API row
-        self._api_w = QWidget(); self._api_w.setAttribute(Qt.WA_TranslucentBackground)
-        apl = QVBoxLayout(self._api_w); apl.setContentsMargins(0,0,0,0); apl.setSpacing(3)
+        self._auto_bar = MiniBar(h=4)
+        awl.addWidget(self._auto_bar)
+        rl2.addWidget(self._auto_w)
+        self._api_w = QWidget()
+        self._api_w.setAttribute(Qt.WA_TranslucentBackground)
+        apl = QVBoxLayout(self._api_w)
+        apl.setContentsMargins(0, 0, 0, 0)
+        apl.setSpacing(3)
         self._row_refs["api_pct"] = kv_row(apl, self.T("api_pct"))
-        self._api_bar = MiniBar(h=4); apl.addWidget(self._api_bar); rl2.addWidget(self._api_w)
-        # hint
-        self._hint_lbl = ql("", 8, c("t_muted")); self._hint_lbl.setWordWrap(True)
+        self._api_bar = MiniBar(h=4)
+        apl.addWidget(self._api_bar)
+        rl2.addWidget(self._api_w)
+        self._hint_lbl = ql("", 8, c("t_muted"))
+        self._hint_lbl.setWordWrap(True)
         self._hint_lbl.setMaximumHeight(0)
         self._hint_lbl.setVisible(False)
         rl2.addWidget(self._hint_lbl)
@@ -1218,6 +1317,7 @@ class CreditsPage(QWidget):
         set_lbl_color(self._hdr_personal, c("accent"))
         set_lbl_color(self._hdr_org,      c("c_green"))
         set_lbl_color(self._hdr_rates,    c("accent2"))
+        self._retry_btn.setText(self.T("err_retry"))
 
     @staticmethod
     def _bonus_tag_qss() -> str:
