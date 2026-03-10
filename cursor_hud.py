@@ -1742,121 +1742,101 @@ class SettingsPage(QWidget):
         sw = ToggleSwitch(checked=enabled)
         sw.toggled.connect(lambda val, k=key: self._on_switch(k, val))
         rl.addWidget(sw)
+
+        # Make the entire row clickable (toggle the switch)
+        def _row_click(event, _sw=sw):
+            _sw.toggle()
+        rw.mousePressEvent = _row_click
+
         return rw, lbl, sw
 
-    def _apply_sub_disabled(self, parent_key: str, child_key: str):
-        """Dim and disable child rows when the parent toggle is off."""
-        parent_on = self.settings.get(parent_key, True)
-        ref = self._sw_refs.get(child_key)
-        if not ref: return
-        row, lbl, sw = ref
-        sw.set_disabled(not parent_on)
-        # dim label via opacity
-        alpha = 255 if parent_on else 80
-        col = c("t_muted")
-        lbl.setStyleSheet(
-            f"color:rgba({col.red()},{col.green()},{col.blue()},{alpha});"
-            "background:transparent;"
-        )
-
     def _on_switch(self, key: str, value: bool):
+        _metrics.inc(f"toggle_{key}")
         if key == "_startup":
             if value:
-                exe = str(Path(sys.executable if getattr(sys,"frozen",False) else sys.argv[0]).resolve())
-                register_startup(exe); log.debug("startup registered: %s", exe)
+                exe = str(Path(
+                    sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
+                ).resolve())
+                register_startup(exe)
             else:
-                unregister_startup(); log.debug("startup unregistered")
+                unregister_startup()
         else:
             self.settings[key] = value
             save_settings(self.settings)
-            # if parent toggle, immediately update sub-option disabled state
             self.changed.emit()
             if key == "pin_on_top":
                 self.pin_changed.emit(value)
 
     def _sync_pin(self, value: bool):
-        """Sync the titlebar pin button state with the settings tab toggle (no rebuild)."""
         self.settings["pin_on_top"] = value
         save_settings(self.settings)
-        # find pin_on_top switch widget and update directly
         ref = self._sw_refs.get("pin_on_top")
         if ref:
             _, _, sw = ref
             sw.set_checked(value)
 
     def _is_startup_registered(self) -> bool:
-        if sys.platform != "win32": return False
+        if sys.platform != "win32":
+            return False
         try:
             import winreg
-            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
-            winreg.QueryValueEx(k, "CursorHUD"); winreg.CloseKey(k)
+            k = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_READ)
+            winreg.QueryValueEx(k, "CursorHUD")
+            winreg.CloseKey(k)
             return True
         except Exception:
             return False
 
-    def _theme_btn(self, text: str, theme: dict, checked: bool) -> QPushButton:
-        btn = QPushButton(text); btn.setCheckable(True); btn.setChecked(checked)
-        btn.setFixedHeight(28)
-        av = theme["accent"]; ac_hex = QColor(*av).name()
-        bg_hex = QColor(*theme["bg_card"]).name(); mu = c("t_muted").name()
-        btn.setStyleSheet(f"QPushButton{{color:{mu};background:{bg_hex};border:1px solid rgba(128,128,128,0.25);border-radius:5px;font-size:9px;font-family:Segoe UI;font-weight:600;}}QPushButton:checked{{color:{ac_hex};border:2px solid {ac_hex};background:rgba({av[0]},{av[1]},{av[2]},25);}}QPushButton:hover:not(:checked){{border:1px solid rgba(128,128,128,0.50);}}")
-        return btn
-
     def refresh_theme(self):
-        """Re-apply baked-in colors inside SettingsPage on theme change."""
-        ac = c("accent").name(); mu = c("t_muted").name()
         hdr = self._t.get("settings_title")
-        if hdr: set_lbl_color(hdr, c("t_muted"))
+        if hdr:
+            set_lbl_color(hdr, c("t_muted"))
         for key in ("lang_label", "theme_label", "show_sections"):
             lbl = self._t.get(key)
-            if lbl: set_lbl_color(lbl, c("t_muted"))
-        lang_style = (
-            f"QPushButton{{color:{mu};background:transparent;border:1px solid rgba(128,128,128,0.28);border-radius:3px;font-size:9px;padding:1px 12px;font-family:Segoe UI;font-weight:600;}}QPushButton:checked{{color:{ac};border:1px solid {ac};background:rgba(128,128,128,0.10);}}"
-        )
+            if lbl:
+                set_lbl_color(lbl, c("t_muted"))
         for code in ("ko", "en"):
             btn = self._t.get(f"lang_{code}")
-            if btn: btn.setStyleSheet(lang_style)
-        # theme buttons — each theme keeps its own bg_card color; only unchecked labels use t_muted
+            if btn:
+                btn.setStyleSheet(_pill_btn_qss())
         cur_theme = self.settings.get("theme", "dark")
         for tname, _ in self.THEMES_ORDER:
             btn = self._t.get(f"theme_{tname}")
-            if not btn: continue
-            theme = THEMES[tname]
-            av = theme["accent"]; ac_hex = QColor(*av).name()
-            bg_hex = QColor(*theme["bg_card"]).name(); tmu = c("t_muted").name()
-            btn.setStyleSheet(f"QPushButton{{color:{tmu};background:{bg_hex};border:1px solid rgba(128,128,128,0.25);border-radius:5px;font-size:9px;font-family:Segoe UI;font-weight:600;}}QPushButton:checked{{color:{ac_hex};border:2px solid {ac_hex};background:rgba({av[0]},{av[1]},{av[2]},25);}}QPushButton:hover:not(:checked){{border:1px solid rgba(128,128,128,0.50);}}")
-            btn.setChecked(tname == cur_theme)
-        # toggle row labels
+            if btn:
+                btn.setStyleSheet(_theme_btn_qss(THEMES[tname]))
+                btn.setChecked(tname == cur_theme)
         for key, (row, lbl, sw) in self._sw_refs.items():
             set_lbl_color(lbl, c("t_body"))
-        # auto_saved
         lbl = self._t.get("auto_saved")
-        if lbl: set_lbl_color(lbl, c("t_dim"))
+        if lbl:
+            set_lbl_color(lbl, c("t_dim"))
 
     def _set_lang(self, code: str):
-        if self.settings.get("lang") == code: return
-        self.settings["lang"] = code; save_settings(self.settings)
-        self._update_texts()   # replace text only, no widget rebuild
+        if self.settings.get("lang") == code:
+            return
+        _metrics.inc("lang_change")
+        self.settings["lang"] = code
+        save_settings(self.settings)
+        self._update_texts()
         self.changed.emit()
-        QTimer.singleShot(60, self._request_height_adjust)
-
-    def _request_height_adjust(self):
-        self.height_adjust_needed.emit()
+        QTimer.singleShot(60, self.height_adjust_needed.emit)
 
     def _set_theme(self, name: str):
-        if self.settings.get("theme") == name: return
-        self.settings["theme"] = name; save_settings(self.settings)
+        if self.settings.get("theme") == name:
+            return
+        _metrics.inc(f"theme_{name}")
+        self.settings["theme"] = name
+        save_settings(self.settings)
         apply_theme(name)
-        # update theme button checked state + style in-place (no widget rebuild)
+        _hatch_cache.clear()  # invalidate hatch pixmap cache on theme change
         for tname, tkey in self.THEMES_ORDER:
             btn = self._t.get(f"theme_{tname}")
             if btn:
                 btn.setChecked(tname == name)
-                av = THEMES[tname]["accent"]; ac_hex = QColor(*av).name()
-                bg_hex = QColor(*THEMES[tname]["bg_card"]).name()
-                mu = c("t_muted").name()
-                btn.setStyleSheet(f"QPushButton{{color:{mu};background:{bg_hex};border:1px solid rgba(128,128,128,0.25);border-radius:5px;font-size:9px;font-family:Segoe UI;font-weight:600;}}QPushButton:checked{{color:{ac_hex};border:2px solid {ac_hex};background:rgba({av[0]},{av[1]},{av[2]},25);}}QPushButton:hover:not(:checked){{border:1px solid rgba(128,128,128,0.50);}}")
+                btn.setStyleSheet(_theme_btn_qss(THEMES[tname]))
         self.theme_changed.emit(name)
 
 
@@ -1870,74 +1850,107 @@ class StatusBar(QWidget):
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedHeight(28); self.settings = settings
-        hl = QHBoxLayout(self); hl.setContentsMargins(12,0,8,0); hl.setSpacing(5)
+        self.setFixedHeight(28)
+        self.settings = settings
+        hl = QHBoxLayout(self)
+        hl.setContentsMargins(12, 0, 8, 0)
+        hl.setSpacing(5)
 
         self._dot = QLabel("●")
-        self._dot.setStyleSheet(f"color:{c('t_muted').name()};font-size:8px;background:transparent;")
-        self._dot.setFixedWidth(12); hl.addWidget(self._dot)
+        self._dot.setStyleSheet(
+            f"color:{c('t_muted').name()};font-size:8px;background:transparent;")
+        self._dot.setFixedWidth(12)
+        hl.addWidget(self._dot)
         self._last_state = "ok"
 
         self._clock_lbl = QLabel("—")
         self._clock_lbl.setStyleSheet(
-            f"color:{c('t_muted').name()};font-size:9px;background:transparent;font-family:Consolas;"
-        )
-        hl.addWidget(self._clock_lbl); hl.addStretch()
+            f"color:{c('t_muted').name()};font-size:9px;"
+            "background:transparent;font-family:Consolas;")
+        hl.addWidget(self._clock_lbl)
+        hl.addStretch()
 
         self._cd_lbl = QLabel("")
         self._cd_lbl.setStyleSheet(
-            f"color:{c('t_dim').name()};font-size:8px;background:transparent;font-family:Segoe UI;"
-        )
+            f"color:{c('t_dim').name()};font-size:8px;"
+            "background:transparent;font-family:Segoe UI;")
         hl.addWidget(self._cd_lbl)
 
-        # debug button (small and subtle)
         self._dbg_btn = QPushButton(S(settings, "debug_btn"))
-        self._dbg_btn.setFixedSize(30, 22); self._dbg_btn.setCursor(Qt.PointingHandCursor)
+        self._dbg_btn.setFixedSize(30, 22)
+        self._dbg_btn.setCursor(Qt.PointingHandCursor)
         mu = c("t_dim").name()
-        self._dbg_btn.setStyleSheet(f"QPushButton{{color:{mu};background:transparent;border:1px solid rgba(128,128,128,0.18);border-radius:3px;font-size:8px;}}QPushButton:hover{{color:{c('t_muted').name()};border-color:rgba(128,128,128,0.40);}}")
-        self._dbg_btn.clicked.connect(self.debug_clicked); hl.addWidget(self._dbg_btn)
+        self._dbg_btn.setStyleSheet(
+            f"QPushButton{{ color:{mu}; background:transparent;"
+            f" border:1px solid rgba(128,128,128,0.18); border-radius:3px; font-size:8px; }}"
+            f" QPushButton:hover{{ color:{c('t_muted').name()};"
+            f" border-color:rgba(128,128,128,0.40); }}"
+        )
+        self._dbg_btn.clicked.connect(self.debug_clicked)
+        hl.addWidget(self._dbg_btn)
 
-        # refresh button
         self._rbtn = QPushButton(S(settings, "refresh_btn"))
-        self._rbtn.setFixedSize(26, 22); self._rbtn.setCursor(Qt.PointingHandCursor)
+        self._rbtn.setFixedSize(26, 22)
+        self._rbtn.setCursor(Qt.PointingHandCursor)
         ac = c("accent").name()
-        self._rbtn.setStyleSheet(f"QPushButton{{color:{ac};background:rgba(128,128,128,0.08);border:1px solid rgba(128,128,128,0.25);border-radius:4px;font-size:12px;}}QPushButton:hover{{background:rgba(128,128,128,0.18);}}")
-        self._rbtn.clicked.connect(self.refresh_clicked); hl.addWidget(self._rbtn)
+        self._rbtn.setStyleSheet(
+            f"QPushButton{{ color:{ac}; background:rgba(128,128,128,0.08);"
+            f" border:1px solid rgba(128,128,128,0.25); border-radius:4px; font-size:12px; }}"
+            f" QPushButton:hover{{ background:rgba(128,128,128,0.18); }}"
+        )
+        self._rbtn.clicked.connect(self.refresh_clicked)
+        hl.addWidget(self._rbtn)
 
     def set_status(self, state: str):
         self._last_state = state
-        col_map = {"ok": c("c_green"), "loading": c("c_amber"), "error": c("c_red"), "mock": c("accent2")}
+        col_map = {
+            "ok": c("c_green"), "loading": c("c_amber"),
+            "error": c("c_red"), "mock": c("accent2"),
+        }
         col = col_map.get(state, c("t_muted"))
         is_mock = state == "mock"
         self._dot.setText("T" if is_mock else "●")
         self._dot.setStyleSheet(
             f"color:rgba({col.red()},{col.green()},{col.blue()},255);"
-            f"font-size:8px;font-weight:{'700' if is_mock else '400'};background:transparent;"
-        )
+            f"font-size:8px;font-weight:{'700' if is_mock else '400'};"
+            "background:transparent;")
+        # Refresh button: show spinner text while loading
+        if state == "loading":
+            self._rbtn.setText("…")
+        else:
+            self._rbtn.setText(S(self.settings, "refresh_btn"))
 
-    def set_clock(self, ts: str): self._clock_lbl.setText(ts)
+    def set_clock(self, ts: str):
+        self._clock_lbl.setText(ts)
 
     def set_countdown(self, secs: int):
         self._cd_lbl.setText(
-            f"{S(self.settings,'next_refresh')} {secs}{S(self.settings,'seconds')}"
-        )
+            f"{S(self.settings, 'next_refresh')} {secs}{S(self.settings, 'seconds')}")
 
     def refresh_labels(self):
-        """Refresh label texts on language change."""
         self._dbg_btn.setText(S(self.settings, "debug_btn"))
 
     def refresh_theme(self):
         self.set_status(self._last_state)
         self._clock_lbl.setStyleSheet(
-            f"color:{c('t_muted').name()};font-size:9px;background:transparent;font-family:Consolas;"
-        )
+            f"color:{c('t_muted').name()};font-size:9px;"
+            "background:transparent;font-family:Consolas;")
         self._cd_lbl.setStyleSheet(
-            f"color:{c('t_dim').name()};font-size:8px;background:transparent;font-family:Segoe UI;"
-        )
+            f"color:{c('t_dim').name()};font-size:8px;"
+            "background:transparent;font-family:Segoe UI;")
         mu = c("t_dim").name()
-        self._dbg_btn.setStyleSheet(f"QPushButton{{color:{mu};background:transparent;border:1px solid rgba(128,128,128,0.18);border-radius:3px;font-size:8px;}}QPushButton:hover{{color:{c('t_muted').name()};border-color:rgba(128,128,128,0.40);}}")
+        self._dbg_btn.setStyleSheet(
+            f"QPushButton{{ color:{mu}; background:transparent;"
+            f" border:1px solid rgba(128,128,128,0.18); border-radius:3px; font-size:8px; }}"
+            f" QPushButton:hover{{ color:{c('t_muted').name()};"
+            f" border-color:rgba(128,128,128,0.40); }}"
+        )
         ac = c("accent").name()
-        self._rbtn.setStyleSheet(f"QPushButton{{color:{ac};background:rgba(128,128,128,0.08);border:1px solid rgba(128,128,128,0.25);border-radius:4px;font-size:12px;}}QPushButton:hover{{background:rgba(128,128,128,0.18);}}")
+        self._rbtn.setStyleSheet(
+            f"QPushButton{{ color:{ac}; background:rgba(128,128,128,0.08);"
+            f" border:1px solid rgba(128,128,128,0.25); border-radius:4px; font-size:12px; }}"
+            f" QPushButton:hover{{ background:rgba(128,128,128,0.18); }}"
+        )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1950,38 +1963,52 @@ class NavBar(QWidget):
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedHeight(36); self.settings = settings
+        self.setFixedHeight(36)
+        self.settings = settings
         self._btns: list[QPushButton] = []
-        hl = QHBoxLayout(self); hl.setContentsMargins(8,4,8,0); hl.setSpacing(2)
+        hl = QHBoxLayout(self)
+        hl.setContentsMargins(8, 4, 8, 0)
+        hl.setSpacing(2)
         for i, key in enumerate(self.TABS):
             btn = QPushButton(S(settings, key))
-            btn.setCheckable(True); btn.setFixedHeight(28); btn.setCursor(Qt.PointingHandCursor)
+            btn.setCheckable(True)
+            btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor)
             self._apply_style(btn)
             btn.clicked.connect(lambda _, idx=i: self.tab_clicked.emit(idx))
-            self._btns.append(btn); hl.addWidget(btn, 1)
+            self._btns.append(btn)
+            hl.addWidget(btn, 1)
 
     def _apply_style(self, btn):
-        ac = c("accent").name(); mu = c("t_muted").name()
-        btn.setStyleSheet(f"QPushButton{{color:{mu};background:transparent;border:none;border-bottom:2px solid transparent;font-family:Segoe UI;font-size:9px;font-weight:600;letter-spacing:0.5px;padding:0 4px;}}QPushButton:checked{{color:{ac};border-bottom:2px solid {ac};}}QPushButton:hover:not(:checked){{color:rgba(170,185,215,180);}}")
+        ac = c("accent").name()
+        mu = c("t_muted").name()
+        btn.setStyleSheet(
+            f"QPushButton{{ color:{mu}; background:transparent; border:none;"
+            f" border-bottom:2px solid transparent; font-family:Segoe UI;"
+            f" font-size:9px; font-weight:600; letter-spacing:0.5px; padding:0 4px; }}"
+            f" QPushButton:checked{{ color:{ac}; border-bottom:2px solid {ac}; }}"
+            f" QPushButton:hover{{ color:rgba(170,185,215,180); }}"
+            f" QPushButton:checked:hover{{ color:{ac}; }}"
+        )
 
     def set_active(self, idx: int):
-        for i, btn in enumerate(self._btns): btn.setChecked(i == idx)
+        for i, btn in enumerate(self._btns):
+            btn.setChecked(i == idx)
 
     def refresh_labels(self):
-        for i, key in enumerate(self.TABS): self._btns[i].setText(S(self.settings, key))
+        for i, key in enumerate(self.TABS):
+            self._btns[i].setText(S(self.settings, key))
 
     def refresh_theme(self):
-        for btn in self._btns: self._apply_style(btn)
+        for btn in self._btns:
+            self._apply_style(btn)
 
 
 # ══════════════════════════════════════════════════════════════
 #  RESIZE GRIP
 # ══════════════════════════════════════════════════════════════
 class ResizeGrip(QWidget):
-    """Bottom-right corner drag handle — width-only resize.
-    Shows diagonal cursor (standard resize affordance) but only adjusts width;
-    height follows compact layout automatically."""
-    SIZE = 16   # square hit area
+    SIZE = 16
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -1992,18 +2019,17 @@ class ResizeGrip(QWidget):
         self._start_w  = None
 
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
         col = QColor(180, 180, 180, 90)
         p.setPen(QPen(col, 1.2))
         s = self.SIZE
-        # Draw 3 diagonal tick marks (bottom-right corner convention)
         for i in range(3):
             o = 4 + i * 4
             p.drawLine(s - o, s - 1, s - 1, s - o)
         p.end()
 
     def reposition(self):
-        """Snap to bottom-right corner of the window."""
         win = self.window()
         self.move(win.width() - self.SIZE, win.height() - self.SIZE)
 
@@ -2018,18 +2044,16 @@ class ResizeGrip(QWidget):
             delta_x = e.globalPos().x() - self._start_x
             win = self.window()
             new_w = max(win.minimumWidth(), min(WIN_W_MAX, self._start_w + delta_x))
-            win.resize(new_w, win.height())   # height follows compact layout
+            win.resize(new_w, win.height())
 
     def mouseReleaseEvent(self, _):
         self._dragging = False
 
 
 # ══════════════════════════════════════════════════════════════
-#  COMPACT STACK  — reflects only current page height, ignores max of other pages
+#  COMPACT STACK
 # ══════════════════════════════════════════════════════════════
 class CompactStack(QStackedWidget):
-    """Override QStackedWidget: sizeHint/minimumSizeHint report only the current page.
-    Hidden pages never inflate the window height."""
     def sizeHint(self):
         w = self.currentWidget()
         if w:
@@ -2040,8 +2064,7 @@ class CompactStack(QStackedWidget):
     def minimumSizeHint(self):
         w = self.currentWidget()
         if w:
-            s = w.minimumSizeHint()
-            return QSize(s.width(), s.height())
+            return QSize(w.minimumSizeHint().width(), w.minimumSizeHint().height())
         return QSize(0, 0)
 
 
@@ -2049,13 +2072,19 @@ class CompactStack(QStackedWidget):
 #  MAIN WINDOW
 # ══════════════════════════════════════════════════════════════
 class HUDWindow(QMainWindow):
-    def minimumSizeHint(self): return QSize(ARC_MIN_W, 0)
-    def sizeHint(self): return QSize(getattr(self, "_cur_win_w", WIN_W), getattr(self, "_target_h", WIN_H))
+    def minimumSizeHint(self):
+        return QSize(ARC_MIN_W, 0)
+
+    def sizeHint(self):
+        return QSize(
+            getattr(self, "_cur_win_w", WIN_W),
+            getattr(self, "_target_h", WIN_H))
+
     def __init__(self, mock_file: str | None = None):
         super().__init__()
         self.setWindowTitle("Cursor HUD")
         self._mock_file = mock_file
-        self.settings        = load_settings()
+        self.settings   = load_settings()
         apply_theme(self.settings.get("theme", "dark"))
         self._pin_on_top = self.settings.get("pin_on_top", True)
         self._mini_mode  = False
@@ -2067,116 +2096,178 @@ class HUDWindow(QMainWindow):
         self._drag_pos       = None
         self._fetcher        = None
         self._last_data      = None
+        self._last_raw       = None
         self._current_screen = None
-        self._cur_win_w      = WIN_W   # updated by _apply_size based on screen
-        # Height recalc debounce timer (prevents duplicate fires during drag)
+        self._cur_win_w      = WIN_W
         self._target_h       = WIN_H
         self._height_timer   = QTimer(self)
         self._height_timer.setSingleShot(True)
         self._height_timer.timeout.connect(self._do_adjust_height)
         self._countdown      = REFRESH_MS // 1000
+        self._tray           = None
         self._apply_size(QApplication.primaryScreen())
-        # Restore saved position (default: bottom-right corner)
+
         geo = QApplication.primaryScreen().availableGeometry()
         saved_x = self.settings.get("win_x")
         saved_y = self.settings.get("win_y")
         if saved_x is not None and saved_y is not None:
-            x = max(geo.left(), min(saved_x, geo.right()  - 60))
-            y = max(geo.top(),  min(saved_y, geo.bottom() - 60))
+            x = max(geo.left(), min(saved_x, geo.right() - 60))
+            y = max(geo.top(), min(saved_y, geo.bottom() - 60))
             self.move(x, y)
         else:
             self.move(geo.right() - self._cur_win_w - 20, geo.bottom() - WIN_H - 20)
         self.resize(self._cur_win_w, WIN_H)
         self._mini_mode = self.settings.get("mini_mode", False)
         self._build_ui()
+        self._setup_shortcuts()
+        self._setup_tray()
         self._setup_timers()
-        if self._mini_mode:   # restore saved mini mode
+        if self._mini_mode:
             self._apply_mini()
         self._fetch()
 
+    # ── System tray ───────────────────────────────────────────
+    def _setup_tray(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self._tray = QSystemTrayIcon(self)
+        # Create a simple colored icon
+        pm = QPixmap(32, 32)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setBrush(QBrush(QColor(0, 220, 255)))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(QRectF(2, 2, 28, 28), 6, 6)
+        p.setPen(QPen(QColor(255, 255, 255), 2))
+        p.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        p.drawText(QRectF(0, 0, 32, 32), Qt.AlignCenter, "C")
+        p.end()
+        self._tray.setIcon(QIcon(pm))
+        self._tray.setToolTip("Cursor HUD")
+
+        menu = QMenu()
+        show_act = menu.addAction(S(self.settings, "tray_show"))
+        show_act.triggered.connect(self._tray_show)
+        refresh_act = menu.addAction(S(self.settings, "tray_refresh"))
+        refresh_act.triggered.connect(self._fetch)
+        menu.addSeparator()
+        quit_act = menu.addAction(S(self.settings, "tray_quit"))
+        quit_act.triggered.connect(QApplication.quit)
+        self._tray.setContextMenu(menu)
+        self._tray.activated.connect(self._on_tray_activated)
+        self._tray.show()
+
+    def _tray_show(self):
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.DoubleClick:
+            self._tray_show()
+
+    # ── Keyboard shortcuts ────────────────────────────────────
+    def _setup_shortcuts(self):
+        QShortcut(QKeySequence("Ctrl+R"), self, self._fetch)
+        QShortcut(QKeySequence("Ctrl+M"), self, self._toggle_mini)
+        QShortcut(QKeySequence("Escape"), self, self._on_escape)
+        QShortcut(QKeySequence("Ctrl+1"), self, lambda: self._switch_tab(0))
+        QShortcut(QKeySequence("Ctrl+2"), self, lambda: self._switch_tab(1))
+        QShortcut(QKeySequence("Ctrl+3"), self, lambda: self._switch_tab(2))
+
+    def _on_escape(self):
+        if self._mini_mode:
+            return
+        self._toggle_mini()
+
     def _apply_size(self, screen: QScreen):
-        """Called on screen (monitor) change. Width is preserved; height is recalculated.
-
-        Do not manually correct for devicePixelRatio: with Qt AA_EnableHighDpiScaling
-        enabled, Qt already maps logical to physical pixels. Adding a manual correction
-        would double-apply scale and make the window too large
-        (e.g. request 548px -> actual 959px = 548 * 1.75 DPI).
-
-        Do not call resize() here: it re-triggers moveEvent and can cause _apply_size loop.
-        """
-        if screen == self._current_screen: return
+        if screen == self._current_screen:
+            return
         self._current_screen = screen
-        self._cur_win_w = _preset_win_w(screen)   # width preset for current screen
-        self.setMinimumWidth(self._cur_win_w)      # prevent narrowing below preset
-        self.setMaximumWidth(WIN_W_MAX)             # allow widening freely
+        self._cur_win_w = _preset_win_w(screen)
+        self.setMinimumWidth(self._cur_win_w)
+        self.setMaximumWidth(WIN_W_MAX)
         self.resize(self._cur_win_w, self.height())
-        # Recalculate compact height after layout settles
         QTimer.singleShot(80, self._adjust_height)
 
     def _build_ui(self):
-        root = QWidget(); root.setAttribute(Qt.WA_TranslucentBackground)
-        root.setMinimumSize(0, 0)  # prevent layout minimum from propagating to window
+        root = QWidget()
+        root.setAttribute(Qt.WA_TranslucentBackground)
+        root.setMinimumSize(0, 0)
         self.setCentralWidget(root)
-        vl = QVBoxLayout(root); vl.setContentsMargins(10,10,10,8); vl.setSpacing(0)
-        vl.setSizeConstraint(QVBoxLayout.SetNoConstraint)  # prevent MINMAXINFO conflict
+        vl = QVBoxLayout(root)
+        vl.setContentsMargins(10, 10, 10, 8)
+        vl.setSpacing(0)
+        vl.setSizeConstraint(QVBoxLayout.SetNoConstraint)
 
         # Title bar
-        tbar = QWidget(); tbar.setAttribute(Qt.WA_TranslucentBackground); tbar.setFixedHeight(32)
-        tbar.setCursor(Qt.SizeAllCursor)        # drag cursor hint
-        tl = QHBoxLayout(tbar); tl.setContentsMargins(10,0,6,0); tl.setSpacing(8)
-        self._tbar = tbar                        # Keep reference for event filter
-        tbar.installEventFilter(self)            # drag handled in HUDWindow.eventFilter
-
-        _mu0 = c("t_muted").name(); _br0 = c("t_bright").name()
+        tbar = QWidget()
+        tbar.setAttribute(Qt.WA_TranslucentBackground)
+        tbar.setFixedHeight(32)
+        tbar.setCursor(Qt.SizeAllCursor)
+        tl = QHBoxLayout(tbar)
+        tl.setContentsMargins(10, 0, 6, 0)
+        tl.setSpacing(8)
+        self._tbar = tbar
+        tbar.installEventFilter(self)
 
         self._logo = QLabel("⬡")
-        self._logo.setStyleSheet(f"color:{c('accent').name()};font-size:13px;background:transparent;")
+        self._logo.setStyleSheet(
+            f"color:{c('accent').name()};font-size:13px;background:transparent;")
         tl.addWidget(self._logo)
         self._title_lbl = QLabel("CursorHUD")
         self._title_lbl.setStyleSheet(
             f"color:{c('t_bright').name()};font-family:Segoe UI;font-size:10px;"
-            "font-weight:600;letter-spacing:2px;background:transparent;"
-        )
-        tl.addWidget(self._title_lbl); tl.addStretch()
-        # Theme cycle button — visible only in mini mode, sits just left of mini toggle
-        self._theme_btn = QPushButton("◐"); self._theme_btn.setFixedSize(22, 22)
+            "font-weight:600;letter-spacing:2px;background:transparent;")
+        tl.addWidget(self._title_lbl)
+        tl.addStretch()
+
+        self._theme_btn = QPushButton("◐")
+        self._theme_btn.setFixedSize(22, 22)
         self._theme_btn.setCursor(Qt.PointingHandCursor)
         self._theme_btn.setToolTip("Next theme")
         self._theme_btn.clicked.connect(self._cycle_theme)
         self._theme_btn.setVisible(False)
-        self._theme_btn.setStyleSheet(f"QPushButton{{color:{_mu0};background:transparent;border:none;font-size:11px;}}QPushButton:hover{{color:{_br0};}}")
+        self._theme_btn.setStyleSheet(_icon_btn_qss())
         tl.addWidget(self._theme_btn)
-        # mini mode button
-        self._mini_btn = QPushButton("⊟"); self._mini_btn.setFixedSize(22,22)
+
+        self._mini_btn = QPushButton("⊟")
+        self._mini_btn.setFixedSize(22, 22)
         self._mini_btn.setCursor(Qt.PointingHandCursor)
-        self._mini_btn.setToolTip("Mini mode")
-        self._mini_btn.setStyleSheet(f"QPushButton{{color:{_mu0};background:transparent;border:none;font-size:11px;}}QPushButton:hover{{color:{_br0};}}")
+        self._mini_btn.setToolTip("Mini mode  (Ctrl+M)")
+        self._mini_btn.setStyleSheet(_icon_btn_qss())
         self._mini_btn.clicked.connect(self._toggle_mini)
         tl.addWidget(self._mini_btn)
 
-        # Pin button
-        self._pin_btn = QPushButton("⏚" if self._pin_on_top else "⏚")
-        self._pin_btn.setFixedSize(22,22); self._pin_btn.setCursor(Qt.PointingHandCursor)
+        self._pin_btn = QPushButton("⏚")
+        self._pin_btn.setFixedSize(22, 22)
+        self._pin_btn.setCursor(Qt.PointingHandCursor)
         self._pin_btn.setToolTip("Always on top")
-        self._pin_btn.setStyleSheet(f"QPushButton{{color:{_mu0};background:transparent;border:none;font-size:11px;}}QPushButton:hover{{color:{_br0};}}")
+        self._pin_btn.setStyleSheet(_icon_btn_qss())
         self._pin_btn.clicked.connect(self._toggle_pin)
         tl.addWidget(self._pin_btn)
 
         self._win_btns: list[tuple[QPushButton, str | None]] = []
         for sym, slot, hc in [("─", self.showMinimized, None), ("✕", self.close, "#FF4660")]:
-            btn = QPushButton(sym); btn.setFixedSize(22,22); btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(slot); mu = c("t_muted").name()
-            btn.setStyleSheet(f"QPushButton{{color:{mu};background:transparent;border:none;font-size:11px;}}QPushButton:hover{{color:{hc or c('t_bright').name()};}}")
+            btn = QPushButton(sym)
+            btn.setFixedSize(22, 22)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(slot)
+            btn.setStyleSheet(_icon_btn_qss(hv=hc))
             tl.addWidget(btn)
             self._win_btns.append((btn, hc))
         vl.addWidget(tbar)
 
         self._nav = NavBar(self.settings)
         self._nav.tab_clicked.connect(self._switch_tab)
-        vl.addWidget(self._nav); vl.addWidget(Divider())
+        vl.addWidget(self._nav)
+        vl.addWidget(Divider())
 
-        self._stack = CompactStack(); self._stack.setAttribute(Qt.WA_TranslucentBackground)
+        self._stack = CompactStack()
+        self._stack.setAttribute(Qt.WA_TranslucentBackground)
         self._pg_credits  = CreditsPage(self.settings)
+        self._pg_credits.retry_clicked.connect(self._fetch)
         self._pg_profile  = ProfilePage(self.settings)
         self._pg_settings = SettingsPage(self.settings)
         self._pg_settings.changed.connect(self._on_settings_changed)
@@ -2186,46 +2277,35 @@ class HUDWindow(QMainWindow):
         for pg in [self._pg_credits, self._pg_profile, self._pg_settings]:
             self._stack.addWidget(pg)
         vl.addWidget(self._stack)
-
         vl.addWidget(Divider())
+
         self._status = StatusBar(self.settings)
         self._status.refresh_clicked.connect(self._fetch)
         self._status.debug_clicked.connect(self._show_debug)
-        # mini mode widget — 3 columns: [gauge bar] [credit remaining / bonus] [Extra]
-        self._mini_w = QWidget(); self._mini_w.setAttribute(Qt.WA_TranslucentBackground)
-        ml = QVBoxLayout(self._mini_w); ml.setContentsMargins(12,8,12,8); ml.setSpacing(6)
-        # gauge bar (full width)
-        self._mini_bar = MiniBar(h=10)
-        ml.addWidget(self._mini_bar)
-        # text row (3 columns)
-        row_w = QWidget(); row_w.setAttribute(Qt.WA_TranslucentBackground)
-        rl = QHBoxLayout(row_w); rl.setContentsMargins(0,0,0,0); rl.setSpacing(0)
-        # remaining credits: main value — 11px bold (balanced with gauge)
-        self._mini_credit_lbl = ql("—", 11, c("t_bright"), bold=True)
-        # bonus: italic, amber, same 11px
-        self._mini_bonus_lbl  = ql("",  11, c("c_amber"))
-        self._mini_bonus_lbl.setFont(QFont("Segoe UI", 10, QFont.Normal, True))  # italic
-        # Extra: right-aligned, 11px normal muted (dim if zero)
-        self._mini_od_lbl     = ql("",  10, c("t_muted"))
-        rl.addWidget(self._mini_credit_lbl)
-        rl.addSpacing(5)
-        rl.addWidget(self._mini_bonus_lbl)
-        rl.addStretch()
-        rl.addWidget(self._mini_od_lbl)
-        ml.addWidget(row_w)
+
+        # Mini mode widget — multi-bar credit breakdown
+        # Each row: [MiniBar] [label $amount]
+        # Bars use base plan limit as one full unit; overflow adds extra bars
+        self._mini_w = QWidget()
+        self._mini_w.setAttribute(Qt.WA_TranslucentBackground)
+        self._mini_layout = QVBoxLayout(self._mini_w)
+        self._mini_layout.setContentsMargins(12, 6, 12, 6)
+        self._mini_layout.setSpacing(3)
+        # Rows are created dynamically in _update_mini
+        self._mini_rows: list[tuple[QWidget, MiniBar, QLabel]] = []
         self._mini_w.hide()
         vl.addWidget(self._mini_w)
         vl.addWidget(self._status)
 
-        # bottom-right resize handle
         self._grip = ResizeGrip(self)
         self._grip.reposition()
         self._switch_tab(0)
         self._refresh_title_btns()
 
     def _switch_tab(self, idx: int):
-        # compute height first → resize → then switch page (prevents flicker)
-        self._stack.setCurrentIndex(idx); self._nav.set_active(idx)
+        _metrics.inc(f"tab_{idx}")
+        self._stack.setCurrentIndex(idx)
+        self._nav.set_active(idx)
         self._adjust_height(delay_ms=0)
 
     def _on_settings_changed(self):
@@ -2233,7 +2313,6 @@ class HUDWindow(QMainWindow):
         self._status.refresh_labels()
         self._pg_credits._rebuild_labels()
         self._pg_profile._rebuild_labels()
-        # Apply card visibility immediately from settings (even before data arrives)
         cfg = self.settings
         self._pg_credits._personal_card.setVisible(cfg.get("show_personal", True))
         self._pg_credits._org_card.setVisible(cfg.get("show_org", True))
@@ -2245,24 +2324,21 @@ class HUDWindow(QMainWindow):
 
     def _on_theme_changed(self, name: str):
         QApplication.instance().setStyleSheet(self._make_qss())
-        # TitleBar
-        self._logo.setStyleSheet(f"color:{c('accent').name()};font-size:13px;background:transparent;")
+        self._logo.setStyleSheet(
+            f"color:{c('accent').name()};font-size:13px;background:transparent;")
         self._title_lbl.setStyleSheet(
             f"color:{c('t_bright').name()};font-family:Segoe UI;font-size:10px;"
-            "font-weight:600;letter-spacing:2px;background:transparent;"
-        )
+            "font-weight:600;letter-spacing:2px;background:transparent;")
         for btn, hc in self._win_btns:
-            mu = c("t_muted").name()
-            btn.setStyleSheet(f"QPushButton{{color:{mu};background:transparent;border:none;font-size:11px;}}QPushButton:hover{{color:{hc or c('t_bright').name()};}}")
-        # Nav / StatusBar
-        self._nav.refresh_theme(); self._status.refresh_theme()
+            btn.setStyleSheet(_icon_btn_qss(hv=hc))
+        self._nav.refresh_theme()
+        self._status.refresh_theme()
         self._refresh_title_btns()
-        # re-apply static colors for Credits / Profile / Settings
         self._pg_credits.refresh_theme()
         self._pg_profile.refresh_theme()
         self._pg_settings.refresh_theme()
-        self.update(); self.repaint()
-        # re-render data values with new theme colors
+        self.update()
+        self.repaint()
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
             self._pg_profile.update_data(self._last_data)
@@ -2270,44 +2346,24 @@ class HUDWindow(QMainWindow):
 
     def _make_qss(self) -> str:
         sb = TH()["scrollbar"]
-        return f"""
-            QScrollBar:vertical{{background:transparent;width:4px;margin:0;}}
-            QScrollBar::handle:vertical{{background:{sb};border-radius:2px;min-height:20px;}}
-            QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}
-            QToolTip{{background:#080A12;color:#E6F0FF;
-            border:1px solid rgba(128,128,128,0.35);border-radius:4px;padding:4px;}}
-        """
+        return (
+            "QScrollBar:vertical{background:transparent;width:4px;margin:0;}"
+            f"QScrollBar::handle:vertical{{background:{sb};"
+            "border-radius:2px;min-height:20px;}"
+            "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
+            "QToolTip{background:#080A12;color:#E6F0FF;"
+            "border:1px solid rgba(128,128,128,0.35);border-radius:4px;padding:4px;}"
+        )
 
     def _refresh_title_btns(self):
-        mu = c("t_muted").name(); br = c("t_bright").name()
-        def _btn_qss(fg, hv):
-            return (
-                f"QPushButton{{color:{fg};background:transparent;border:none;font-size:11px;}}"
-                f"QPushButton:hover{{color:{hv};}}"
-            )
+        mu = c("t_muted").name()
+        br = c("t_bright").name()
         for btn in [self._theme_btn, self._mini_btn, self._pin_btn]:
-            btn.setStyleSheet(_btn_qss(mu, br))
+            btn.setStyleSheet(_icon_btn_qss())
         if self._pin_on_top:
-            self._pin_btn.setStyleSheet(_btn_qss(br, br))
-
-    @staticmethod
-    def _set_topmost_win32(hwnd: int, on_top: bool):
-        """Toggle always-on-top via Windows API without hide/show flicker."""
-        try:
-            import ctypes
-            HWND_TOPMOST    = -1
-            HWND_NOTOPMOST  = -2
-            SWP_NOMOVE      = 0x0002
-            SWP_NOSIZE      = 0x0001
-            SWP_NOACTIVATE  = 0x0010
-            flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-            insert_after = HWND_TOPMOST if on_top else HWND_NOTOPMOST
-            ctypes.windll.user32.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags)
-        except Exception as ex:
-            log.warning("SetWindowPos failed: %s", ex)
+            self._pin_btn.setStyleSheet(_icon_btn_qss(fg=br, hv=br))
 
     def _apply_pin(self, value: bool):
-        """Toggle always-on-top using Qt flags only (setWindowFlags + show)."""
         self._pin_on_top = value
         self.settings["pin_on_top"] = value
         save_settings(self.settings)
@@ -2324,18 +2380,17 @@ class HUDWindow(QMainWindow):
 
     def _on_pin_changed(self, value: bool):
         self._apply_pin(value)
-        # keep titlebar buttons and settings tab switch in sync
         self._pg_settings._sync_pin(value)
 
     def _toggle_mini(self):
+        _metrics.inc("mini_toggle")
         self._mini_mode = not self._mini_mode
         self._apply_mini()
 
     def _cycle_theme(self):
-        """Advance to the next theme in THEMES_ORDER, wrapping around."""
         themes = [tn for tn, _ in self._pg_settings.THEMES_ORDER]
-        cur    = self.settings.get("theme", "dark")
-        nxt    = themes[(themes.index(cur) + 1) % len(themes)] if cur in themes else themes[0]
+        cur = self.settings.get("theme", "dark")
+        nxt = themes[(themes.index(cur) + 1) % len(themes)] if cur in themes else themes[0]
         self._pg_settings._set_theme(nxt)
 
     def _apply_mini(self):
@@ -2343,27 +2398,26 @@ class HUDWindow(QMainWindow):
         self._mini_btn.setText("⊞" if is_mini else "⊟")
         self._nav.setVisible(not is_mini)
         self._stack.setVisible(not is_mini)
-        # Theme cycle button: visible only in mini mode, right-aligned before mini toggle
         self._theme_btn.setVisible(is_mini)
-        # Logo stays visible in both modes
-        # Title label hidden in mini mode (logo only)
         self._title_lbl.setVisible(not is_mini)
-        # StatusBar: always visible — hide only _dbg_btn in mini mode
         self._status.setVisible(True)
         self._status._dbg_btn.setVisible(not is_mini)
-        # Mini widget: shows used / total credits
         self._mini_w.setVisible(is_mini)
         self.setMinimumWidth(self._cur_win_w)
         self.setMaximumWidth(WIN_W_MAX)
-        self.setMaximumHeight(16777215); self.setMinimumHeight(0)
+        self.setMaximumHeight(16777215)
+        self.setMinimumHeight(0)
         self._height_timer.stop()
         self._height_timer.start(50)
 
     def _setup_timers(self):
         if not self._mock_file:
-            t1 = QTimer(self); t1.timeout.connect(self._fetch); t1.start(REFRESH_MS)
-        t2 = QTimer(self); t2.timeout.connect(self._tick);  t2.start(1000)
-        # Show clock/countdown immediately before first timer tick
+            t1 = QTimer(self)
+            t1.timeout.connect(self._fetch)
+            t1.start(REFRESH_MS)
+        t2 = QTimer(self)
+        t2.timeout.connect(self._tick)
+        t2.start(1000)
         self._status.set_clock(datetime.now().strftime("%H:%M:%S"))
         self._status.set_countdown(self._countdown)
 
@@ -2373,6 +2427,7 @@ class HUDWindow(QMainWindow):
         self._status.set_clock(datetime.now().strftime("%H:%M:%S"))
 
     def _fetch(self):
+        _metrics.inc("fetch")
         if self._mock_file:
             try:
                 raw = json.loads(Path(self._mock_file).read_text(encoding="utf-8"))
@@ -2381,14 +2436,13 @@ class HUDWindow(QMainWindow):
             except Exception as exc:
                 self._on_error(f"mock load failed: {exc}")
             return
-        if self._fetcher and self._fetcher.isRunning(): return
+        # Block signals on old fetcher to prevent stale data arrival
         if self._fetcher:
-            try:
-                self._fetcher.ready.disconnect(); self._fetcher.error.disconnect()
-            except TypeError:
-                pass
+            self._fetcher.blockSignals(True)
             self._fetcher.quit()
-            self._fetcher.wait(2000)  # wait up to 2 seconds, then leave to GC
+            self._fetcher.wait(2000)
+            self._fetcher.deleteLater()
+            self._fetcher = None
         self._countdown = REFRESH_MS // 1000
         self._status.set_countdown(self._countdown)
         self._status.set_status("loading")
@@ -2406,57 +2460,127 @@ class HUDWindow(QMainWindow):
         self._pg_profile.update_data(d)
         self._pg_credits.set_error("")
         self._status.set_status("mock" if self._mock_file else "ok")
-        log.info("%sdata updated — budget %.1f%%",
-                 "[MOCK] " if self._mock_file else "", d["credit"]["budget_pct"])
+        cr = d["credit"]
+        log.info("%sdata updated — spent %s/%s (%.1f%%) remain %.1f%% bonus %s",
+                 "[MOCK] " if self._mock_file else "",
+                 usd(cr["budget_used"]), usd(cr["budget_total"]),
+                 cr["budget_pct"], cr["incl_remain_pct"],
+                 usd(cr["bonus_used"]))
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
+        # Update tray tooltip with credit remaining
+        if self._tray:
+            cr = d["credit"]
+            self._tray.setToolTip(
+                f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}")
 
     def _update_mini(self, d: dict):
-        """Refresh mini-mode 3-column widgets — called from both _on_data and refresh_theme."""
-        cr = d["credit"]; od = d["on_demand"]
-        rc = remain_color(cr["incl_remain_pct"])
-        frac = (cr["incl_remain"] / cr["incl_total"]) if cr["incl_total"] else 0
-        self._mini_bar.set_value(frac, rc)
-        # remaining credits
-        self._mini_credit_lbl.setText(f'{usd(cr["budget_remain"])} / {usd(cr["budget_total"])}')
-        set_lbl_color(self._mini_credit_lbl, rc)
-        # bonus (italic amber — only when present)
+        """Rebuild mini-mode bar rows dynamically.
+        Each credit type gets one or more rows (one bar = base plan limit).
+        Overflow beyond the base limit spawns additional bars.
+        """
+        cr = d["credit"]
+        od = d["on_demand"]
+        base_limit = max(1, cr["budget_total"])  # base plan limit in cents (e.g. 2000 = $20)
+
+        # Build row specs: (label, amount_cents, color, show_if_zero)
+        rows_spec: list[tuple[str, int, QColor, bool]] = [
+            (S(self.settings, "row_incl"), cr["incl_used"], c("accent"), True),
+        ]
         if cr["bonus_used"] > 0:
-            self._mini_bonus_lbl.setText(f'+{usd(cr["bonus_used"])}')
-            set_lbl_color(self._mini_bonus_lbl, c("c_amber"))
-            self._mini_bonus_lbl.show()
-        else:
-            self._mini_bonus_lbl.hide()
-        # On-Demand — label text from i18n, dim if zero
-        od_total  = od["personal"]
-        od_label  = S(self.settings, "personal_od")
-        self._mini_od_lbl.setText(f'{od_label} {usd(od_total)}')
-        set_lbl_color(self._mini_od_lbl, c("c_amber") if od_total > 0 else c("t_dim"))
+            rows_spec.append(
+                (S(self.settings, "row_bonus"), cr["bonus_used"], c("c_amber"), False))
+        if od["personal"] > 0:
+            rows_spec.append(
+                (S(self.settings, "row_extra"), od["personal"], c("c_red"), False))
+
+        # Expand rows: if amount > base_limit, split into multiple bars
+        expanded: list[tuple[str, int, float, QColor]] = []  # (label, amount, frac, color)
+        for label, amount, color, _ in rows_spec:
+            if amount <= 0:
+                expanded.append((label, amount, 0.0, color))
+            elif amount <= base_limit:
+                expanded.append((label, amount, amount / base_limit, color))
+            else:
+                # Multiple bars for overflow
+                remaining = amount
+                bar_idx = 0
+                while remaining > 0:
+                    chunk = min(remaining, base_limit)
+                    frac = chunk / base_limit
+                    suffix = f" ({bar_idx + 1})" if amount > base_limit else ""
+                    expanded.append((f"{label}{suffix}", amount if bar_idx == 0 else 0,
+                                     frac, color))
+                    remaining -= chunk
+                    bar_idx += 1
+
+        # Sync widget rows with expanded list
+        layout = self._mini_layout
+        # Remove excess rows
+        while len(self._mini_rows) > len(expanded):
+            row_w, bar, lbl = self._mini_rows.pop()
+            layout.removeWidget(row_w)
+            row_w.deleteLater()
+        # Add missing rows
+        while len(self._mini_rows) < len(expanded):
+            row_w = QWidget()
+            row_w.setAttribute(Qt.WA_TranslucentBackground)
+            rl = QHBoxLayout(row_w)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(8)
+            bar = MiniBar(h=6)
+            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            lbl = QLabel("—")
+            lbl.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lbl.setFixedWidth(90)
+            lbl.setStyleSheet("background:transparent;")
+            rl.addWidget(bar, 1)
+            rl.addWidget(lbl, 0)
+            layout.addWidget(row_w)
+            self._mini_rows.append((row_w, bar, lbl))
+
+        # Update values
+        for i, (label, amount, frac, color) in enumerate(expanded):
+            row_w, bar, lbl = self._mini_rows[i]
+            bar.set_value(frac, color)
+            # Only first bar of each type shows the dollar amount
+            if amount > 0:
+                lbl.setText(f"{label}  {usd(amount)}")
+            else:
+                lbl.setText(label)
+            set_lbl_color(lbl, color)
 
     def _on_error(self, err: str):
+        _metrics.inc("fetch_error")
         log.error("fetch error: %s", err)
         self._pg_credits.set_error(S(self.settings, "err_fetch"))
         self._status.set_status("error")
 
     def _show_debug(self):
-        DebugDialog(self.settings, raw_json=getattr(self, "_last_raw", None), parent=self).exec_()
+        DebugDialog(self.settings, raw_json=self._last_raw, parent=self).exec_()
 
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(self.rect()); ac = c("accent")
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect())
+        ac = c("accent")
         for i in range(12, 0, -3):
             gc = QColor(ac.red(), ac.green(), ac.blue(), i * 3)
-            p.setPen(QPen(gc, 1.0)); p.setBrush(Qt.NoBrush)
-            p.drawRoundedRect(r.adjusted(i,i,-i,-i), 14, 14)
+            p.setPen(QPen(gc, 1.0))
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(r.adjusted(i, i, -i, -i), 14, 14)
         grad = QLinearGradient(0, 0, 0, r.height())
-        grad.setColorAt(0, c("bg_win")); grad.setColorAt(1, c("bg_win2"))
-        p.setBrush(QBrush(grad)); p.setPen(QPen(c("border_hi"), 1))
-        p.drawRoundedRect(r.adjusted(1,1,-1,-1), 14, 14)
+        grad.setColorAt(0, c("bg_win"))
+        grad.setColorAt(1, c("bg_win2"))
+        p.setBrush(QBrush(grad))
+        p.setPen(QPen(c("border_hi"), 1))
+        p.drawRoundedRect(r.adjusted(1, 1, -1, -1), 14, 14)
         p.end()
 
     def _adjust_height(self, delay_ms: int = 80):
-        """Recalculate compact height. delay_ms=0 executes immediately."""
         if delay_ms == 0:
+            QApplication.processEvents()  # settle layout before measurement
             self._do_adjust_height()
         else:
             self._height_timer.stop()
@@ -2464,103 +2588,80 @@ class HUDWindow(QMainWindow):
 
     @staticmethod
     def _measure_layout(lyt) -> int:
-        """Sum visible widget heights directly from a VBoxLayout.
-        Ignores addStretch/QSpacerItem; does not use sizeHint/totalMinimumSize."""
-        if not lyt: return 0
+        if not lyt:
+            return 0
         total = 0
         visible = []
         for i in range(lyt.count()):
             item = lyt.itemAt(i)
-            if not item: continue
+            if not item:
+                continue
             w = item.widget()
             if w and w.isVisible():
                 visible.append(w)
-        rows = []
         for i, w in enumerate(visible):
             h = w.sizeHint().height()
             sp = lyt.spacing() if i < len(visible) - 1 else 0
-            rows.append(f"  [{i}] {type(w).__name__} sh={h} sp={sp}")
             total += h + sp
         m = lyt.contentsMargins()
         total += m.top() + m.bottom()
         return total
 
     def _do_adjust_height(self):
-        """Compute actual window height (runs after debounce timer fires).
-        Traverses visible widgets in page layout directly across all tabs.
-        Avoids QStackedWidget.sizeHint/totalMinimumSize — inflated by stretch items."""
-        idx = self._stack.currentIndex()
-
-        # chrome: tbar(32) + nav(36) + divider×2(2) + status(28) + vl margins(top=10,bot=8)
         CHROME_H      = 32 + 36 + 2 + 28 + 18
-        CHROME_H_MINI = 32 +  0 + 0 + 28 + 18   # mini: no nav, no dividers
+        CHROME_H_MINI = 32 + 0  + 0 + 28 + 18
 
         if self._mini_mode:
-            # Measure mini widget height directly
             lyt = self._mini_w.layout()
             content_h = self._measure_layout(lyt) if lyt else 50
-            target_h  = max(CHROME_H_MINI + 10, CHROME_H_MINI + content_h)
-        elif idx == 0:
-            # Credits: traverse inner widget VBoxLayout via QScrollArea
+            target_h = max(CHROME_H_MINI + 10, CHROME_H_MINI + content_h)
+        elif self._stack.currentIndex() == 0:
             scroll = self._pg_credits.findChild(QScrollArea)
             if scroll and scroll.widget() and scroll.widget().layout():
                 content_h = self._measure_layout(scroll.widget().layout()) + 4
-                # Fix scroll area height to content — prevents excess space expansion
                 scroll.setMaximumHeight(content_h)
             else:
                 content_h = 300
             target_h = max(CHROME_H + 20, CHROME_H + content_h)
         else:
-            # Profile / Settings: traverse top-level VBoxLayout directly
             page = self._stack.currentWidget()
-            lyt  = page.layout() if page else None
+            lyt = page.layout() if page else None
             content_h = self._measure_layout(lyt) if lyt else 200
-            target_h  = max(CHROME_H + 20, CHROME_H + content_h)
+            target_h = max(CHROME_H + 20, CHROME_H + content_h)
+
         self.setMinimumWidth(self._cur_win_w)
         self.setMaximumWidth(WIN_W_MAX)
-        self.setMaximumHeight(16777215); self.setMinimumHeight(0)
+        self.setMaximumHeight(16777215)
+        self.setMinimumHeight(0)
         self._target_h = target_h
         if self.height() != target_h:
             self.resize(self.width(), target_h)
 
     def _apply_scale(self):
-        """Responsive layout: scale all fonts/arc proportionally to window width.
-        Base width = 400px (scale=1.0). Fonts grow linearly above that."""
-        if not hasattr(self, "_title_lbl"): return
-
+        if not hasattr(self, "_title_lbl"):
+            return
         scale = max(1.0, self.width() / WIN_W)
-
-        # ── Titlebar — fixed size regardless of window width ─────────
         self._logo.setStyleSheet(
-            f"color:{c('accent').name()};font-size:13px;background:transparent;"
-        )
+            f"color:{c('accent').name()};font-size:13px;background:transparent;")
         self._title_lbl.setStyleSheet(
             f"color:{c('t_bright').name()};font-family:Segoe UI;"
-            "font-size:10px;font-weight:600;"
-            "letter-spacing:2px;background:transparent;"
-        )
-
-        # ── Credits page ─────────────────────────────────────────────
+            "font-size:10px;font-weight:600;letter-spacing:2px;background:transparent;")
         if hasattr(self, "_pg_credits"):
             arc_size = max(90, min(180, int(150 * scale)))
             self._pg_credits.apply_scale(scale, arc_size=arc_size)
-
-        # ── Mini widget ───────────────────────────────────────────────
-        if hasattr(self, "_mini_credit_lbl"):
-            mini_main = max(9, int(11 * scale))
-            mini_sub  = max(8, int(10 * scale))
-            for lbl in [self._mini_credit_lbl, self._mini_bonus_lbl]:
-                f = lbl.font(); f.setPointSize(mini_main); lbl.setFont(f)
-            f = self._mini_od_lbl.font(); f.setPointSize(mini_sub); self._mini_od_lbl.setFont(f)
+        if hasattr(self, "_mini_rows"):
+            mini_px = max(8, int(9 * scale))
+            for _, bar, lbl in self._mini_rows:
+                f = lbl.font()
+                f.setPointSize(mini_px)
+                lbl.setFont(f)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
         if hasattr(self, "_grip"):
             self._grip.reposition()
-
-        # Width change → scale fonts immediately, then schedule height recalc
         prev_w = getattr(self, "_last_resize_w", None)
-        cur_w  = self.width()
+        cur_w = self.width()
         if prev_w != cur_w:
             self._last_resize_w = cur_w
             self._apply_scale()
@@ -2569,7 +2670,6 @@ class HUDWindow(QMainWindow):
             self._apply_scale()
 
     def eventFilter(self, obj, e):
-        """Allow window drag only via the titlebar (tbar) area."""
         if obj is self._tbar:
             t = e.type()
             if t == e.MouseButtonPress and e.button() == Qt.LeftButton:
@@ -2584,107 +2684,135 @@ class HUDWindow(QMainWindow):
         return super().eventFilter(obj, e)
 
     def closeEvent(self, e):
-        """Save window position, size, and mini-mode state on close."""
         p = self.pos()
-        self.settings["win_x"]    = p.x()
-        self.settings["win_y"]    = p.y()
-        self.settings["win_w"]    = self.width()
+        self.settings["win_x"]     = p.x()
+        self.settings["win_y"]     = p.y()
+        self.settings["win_w"]     = self.width()
         self.settings["mini_mode"] = self._mini_mode
         save_settings(self.settings)
+        if self._tray:
+            self._tray.hide()
         super().closeEvent(e)
 
     def moveEvent(self, event):
         super().moveEvent(event)
         screen = get_screen_for_pos(self.geometry().center())
-        if screen != self._current_screen: self._apply_size(screen)
+        if screen != self._current_screen:
+            self._apply_size(screen)
 
 
 # ══════════════════════════════════════════════════════════════
 #  PLATFORM HELPERS
 # ══════════════════════════════════════════════════════════════
 def enable_dpi():
-    if sys.platform != "win32": return
+    if sys.platform != "win32":
+        return
     try:
-        import ctypes; ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
         try:
-            import ctypes; ctypes.windll.user32.SetProcessDPIAware()
-        except Exception: pass
+            import ctypes
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
 
 def register_startup(exe: str):
-    if sys.platform != "win32": return
+    if sys.platform != "win32":
+        return
     try:
         import winreg
-        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "CursorHUD", 0, winreg.REG_SZ, exe); winreg.CloseKey(k)
-    except Exception as e: log.error("register_startup: %s", e)
+        k = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(k, "CursorHUD", 0, winreg.REG_SZ, exe)
+        winreg.CloseKey(k)
+    except Exception as e:
+        log.error("register_startup: %s", e)
+
 
 def unregister_startup():
-    if sys.platform != "win32": return
+    if sys.platform != "win32":
+        return
     try:
         import winreg
-        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
-        winreg.DeleteValue(k, "CursorHUD"); winreg.CloseKey(k)
-    except Exception as e: log.error("unregister_startup: %s", e)
+        k = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE)
+        winreg.DeleteValue(k, "CursorHUD")
+        winreg.CloseKey(k)
+    except Exception as e:
+        log.error("unregister_startup: %s", e)
+
 
 # ══════════════════════════════════════════════════════════════
 #  ENTRY
 # ══════════════════════════════════════════════════════════════
 def _qt_msg_handler(msg_type, context, msg):
-    if "Unable to set geometry" in msg: return
+    if "Unable to set geometry" in msg:
+        return
     log.warning("Qt: %s", msg)
+
 
 def main():
     if "--install-startup" in sys.argv:
-        exe = str(Path(sys.executable if getattr(sys,"frozen",False) else sys.argv[0]).resolve())
-        register_startup(exe); return
+        exe = str(Path(
+            sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
+        ).resolve())
+        register_startup(exe)
+        return
     if "--uninstall-startup" in sys.argv:
-        unregister_startup(); return
+        unregister_startup()
+        return
 
-    # --mock <path/to/file.json>  — load JSON directly, skip real API calls
     mock_file = None
     if "--mock" in sys.argv:
         idx = sys.argv.index("--mock")
         if idx + 1 < len(sys.argv):
             mock_file = sys.argv[idx + 1]
             if not Path(mock_file).is_file():
-                print(f"[CursorHUD] --mock: file not found: {mock_file}", file=sys.stderr)
+                print(f"[CursorHUD] --mock: file not found: {mock_file}",
+                      file=sys.stderr)
                 sys.exit(1)
             log.info("mock mode: %s", mock_file)
         else:
-            print("[CursorHUD] --mock requires a file path argument.", file=sys.stderr)
+            print("[CursorHUD] --mock requires a file path argument.",
+                  file=sys.stderr)
             sys.exit(1)
 
     enable_dpi()
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,    True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
     qInstallMessageHandler(_qt_msg_handler)
     app.setApplicationName("CursorHUD")
-    app.setQuitOnLastWindowClosed(True)
+    app.setQuitOnLastWindowClosed(True)  # close window = quit app (tray is supplementary)
 
     init_settings = load_settings()
     apply_theme(init_settings.get("theme", "dark"))
-    app.setStyleSheet(f"""
-        QScrollBar:vertical{{background:transparent;width:4px;margin:0;}}
-        QScrollBar::handle:vertical{{background:{TH()["scrollbar"]};border-radius:2px;min-height:20px;}}
-        QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}
-        QToolTip{{background:#080A12;color:#E6F0FF;
-        border:1px solid rgba(128,128,128,0.35);border-radius:4px;padding:4px;}}
-    """)
+    app.setStyleSheet(
+        "QScrollBar:vertical{background:transparent;width:4px;margin:0;}"
+        f"QScrollBar::handle:vertical{{background:{TH()['scrollbar']};"
+        "border-radius:2px;min-height:20px;}"
+        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
+        "QToolTip{background:#080A12;color:#E6F0FF;"
+        "border:1px solid rgba(128,128,128,0.35);border-radius:4px;padding:4px;}"
+    )
 
     db = _cursor_db_path()
     if not mock_file and not db.exists():
-        QMessageBox.critical(None, "CursorHUD",
-            S(init_settings, "err_no_db") + str(db))
+        QMessageBox.critical(
+            None, "CursorHUD", S(init_settings, "err_no_db") + str(db))
         sys.exit(1)
 
     win = HUDWindow(mock_file=mock_file)
     win.show()
     QTimer.singleShot(100, win._adjust_height)
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
