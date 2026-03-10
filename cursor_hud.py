@@ -505,37 +505,33 @@ def parse_data(raw: dict) -> dict:
         "limit_type": s.get("limitType",      "—").upper(),
     }
 
-    # ── Base plan (included) ──────────────────────────────────────────
-    # plan.used   = usage within base limit (same as breakdown.included)
-    # plan.limit  = base credit limit
-    # breakdown.bonus = extra usage covered for free by bonus (read directly)
-    incl_total  = _safe_int(bk.get("included", 0))   # breakdown.included (usage within plan)
-    bonus_used  = _safe_int(bk.get("bonus",    0))   # Bonus credits used (read directly)
-    used_total  = _safe_int(plan.get("used",   0))   # plan.used = actual usage within base limit
+    incl_total  = _safe_int(bk.get("included", 0))
+    bonus_used  = _safe_int(bk.get("bonus",    0))
+    used_total  = _safe_int(plan.get("used",   0))
 
-    plan_limit  = plan.get("limit")      # int or null
-    plan_remain = plan.get("remaining")  # int or null
+    plan_limit  = plan.get("limit")
+    plan_remain = plan.get("remaining")
     if plan_limit:
         budget_total = _safe_int(plan_limit)
     elif plan_remain is not None:
         budget_total = used_total + _safe_int(plan_remain)
     else:
-        budget_total = _safe_int(bk.get("total", 0))  # fallback
-    budget_remain = _safe_int(plan_remain) if plan_remain is not None \
-                    else max(0, budget_total - used_total)
-    incl_remain = max(0, budget_total - used_total)  # = budget_remain
+        budget_total = _safe_int(bk.get("total", 0))
+    budget_remain = (_safe_int(plan_remain) if plan_remain is not None
+                     else max(0, budget_total - used_total))
+    incl_remain = max(0, budget_total - used_total)
 
     credit = {
         "incl_total":       budget_total,
         "incl_used":        used_total,
         "incl_remain":      incl_remain,
-        "incl_remain_pct":  (incl_remain  / budget_total * 100) if budget_total else 0,
+        "incl_remain_pct":  (incl_remain / budget_total * 100) if budget_total else 0,
         "bonus_used":       bonus_used,
         "budget_total":     budget_total,
         "budget_used":      used_total,
-        "budget_pct":       (used_total   / budget_total * 100) if budget_total else 0,
+        "budget_pct":       (used_total / budget_total * 100) if budget_total else 0,
         "budget_remain":    budget_remain,
-        "budget_remain_pct":(budget_remain / budget_total * 100) if budget_total else 0,
+        "budget_remain_pct": (budget_remain / budget_total * 100) if budget_total else 0,
         "api_pct":          _safe_float(plan.get("apiPercentUsed",   0)),
         "auto_pct":         _safe_float(plan.get("autoPercentUsed",  0)),
         "total_pct":        _safe_float(plan.get("totalPercentUsed", 0)),
@@ -564,7 +560,6 @@ def parse_data(raw: dict) -> dict:
     }
 
     is_free = s.get("membershipType", "").lower() in ("free", "hobby")
-    # Team/Enterprise plan: request-based billing — no auto/api % pool
     membership = s.get("membershipType", "").lower()
     is_team = membership in ("team", "enterprise", "business")
 
@@ -579,69 +574,66 @@ def parse_data(raw: dict) -> dict:
         "is_team":    is_team,
     }
 
+
 # ══════════════════════════════════════════════════════════════
 #  HELPERS
 # ══════════════════════════════════════════════════════════════
 def usd(cents: int) -> str:
     return f"${cents / 100:.2f}"
 
-_MONTHS_EN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+_MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 
 def fmt_date(iso: str, lang: str) -> str:
-    """Convert ISO date (YYYY-MM-DD) to a locale-friendly display format.
-    E.g. English: 28 Feb 2026; Korean: YYYY년 M월 D일."""
     try:
-        import datetime as _dt
-        d = _dt.date.fromisoformat(iso[:10])
+        d = _date.fromisoformat(iso[:10])
     except Exception:
         return iso
     if lang == "ko":
         return f"{d.year}년 {d.month}월 {d.day}일"
     return f"{d.day} {_MONTHS_EN[d.month - 1]} {d.year}"
 
+
 def days_left_text(end_iso: str, lang: str) -> str:
-    """Express days remaining until the billing cycle end date.
-    Uses (end_date - today).days + 1 so that the last day shows 'Renews today'.
-    E.g. '15 days left', 'Renews tomorrow', 'Renews today', or 'D+N' for past."""
     try:
-        import datetime as _dt
-        end  = _dt.date.fromisoformat(end_iso[:10])
-        today = _dt.date.today()
-        delta = (end - today).days + 1   # days remaining until day after end date
+        end   = _date.fromisoformat(end_iso[:10])
+        today = _date.today()
+        delta = (end - today).days + 1
     except Exception:
         return end_iso
     if lang == "ko":
-        if delta > 1:   return f"{delta}일 남음"
-        if delta == 1:  return "내일 갱신"
-        if delta == 0:  return "오늘 갱신"
+        if delta > 1:  return f"{delta}일 남음"
+        if delta == 1: return "내일 갱신"
+        if delta == 0: return "오늘 갱신"
         return f"D+{abs(delta)}"
     else:
-        if delta > 1:   return f"{delta} days left"
-        if delta == 1:  return "Renews tomorrow"
-        if delta == 0:  return "Renews today"
+        if delta > 1:  return f"{delta} days left"
+        if delta == 1: return "Renews tomorrow"
+        if delta == 0: return "Renews today"
         return f"D+{abs(delta)}"
 
+
 def pct_color(pct: float) -> QColor:
-    """Usage-based color — more consumed means more urgent color."""
     if pct >= 90: return c("c_red")
     if pct >= 75: return c("c_amber")
     return c("accent")
 
+
 def remain_color(remain_pct: float) -> QColor:
-    """Remaining-based color — traffic-light 3-zone (semantic, independent of theme accent).
-     0~25%  : c_red    danger
-    26~50%  : c_amber  caution
-    51~100% : c_green  ok
-    """
     if remain_pct <= 25: return c("c_red")
     if remain_pct <= 50: return c("c_amber")
     return c("c_green")
 
+
 def ql(text: str = "", size: int = 10, color: QColor = None, bold: bool = False,
         align=Qt.AlignLeft, family: str = "Segoe UI") -> QLabel:
     w = QLabel(text)
-    f = QFont(family, size); f.setBold(bold)
-    w.setFont(f); w.setAlignment(align)
+    f = QFont(family, size)
+    f.setBold(bold)
+    w.setFont(f)
+    w.setAlignment(align)
     col = color or c("t_body")
     w.setStyleSheet(
         f"color:rgba({col.red()},{col.green()},{col.blue()},{col.alpha()});"
@@ -649,84 +641,88 @@ def ql(text: str = "", size: int = 10, color: QColor = None, bold: bool = False,
     )
     return w
 
+
 def set_lbl_color(lbl: QLabel, color: QColor):
-    col = color
     lbl.setStyleSheet(
-        f"color:rgba({col.red()},{col.green()},{col.blue()},255);background:transparent;"
+        f"color:rgba({color.red()},{color.green()},{color.blue()},255);"
+        "background:transparent;"
     )
 
+
 def get_screen_for_pos(pos) -> QScreen:
-    # retry with adjusted rect if exactly on boundary
     for s in QApplication.screens():
-        if s.geometry().contains(pos): return s
-    # boundary pixel — return nearest screen
+        if s.geometry().contains(pos):
+            return s
     best, best_dist = QApplication.primaryScreen(), float("inf")
     for s in QApplication.screens():
-        c = s.geometry().center()
-        d = (c.x() - pos.x()) ** 2 + (c.y() - pos.y()) ** 2
-        if d < best_dist: best, best_dist = s, d
+        ct = s.geometry().center()
+        d = (ct.x() - pos.x()) ** 2 + (ct.y() - pos.y()) ** 2
+        if d < best_dist:
+            best, best_dist = s, d
     return best
 
+
 # ══════════════════════════════════════════════════════════════
-#  HATCH HELPER — shared 45-degree diagonal hatch pattern
+#  HATCH HELPER  — cached QPixmap for 45° diagonal hatch
 # ══════════════════════════════════════════════════════════════
-def _draw_hatch(p: QPainter, w: float, h: float, step: int = 5):
-    """Draw 45° diagonal hatch lines within the current clip region."""
+_hatch_cache: dict[tuple, QPixmap] = {}
+
+
+def _get_hatch_pixmap(w: int, h: int, step: int = 5) -> QPixmap:
+    """Return a cached QPixmap with 45° hatch lines."""
+    key = (w, h, step, hatch_alpha())
+    pm = _hatch_cache.get(key)
+    if pm is not None:
+        return pm
+    pm = QPixmap(max(1, w), max(1, h))
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
     p.setPen(QPen(QColor(128, 128, 128, hatch_alpha()), 1.0))
     ih = int(h)
     for i in range(-ih, int(w) + ih, step):
         p.drawLine(i, 0, i + ih, ih)
+    p.end()
+    _hatch_cache[key] = pm
+    return pm
+
+
+def _draw_hatch(p: QPainter, w: float, h: float, step: int = 5):
+    """Draw cached hatch pattern within the current clip region."""
+    pm = _get_hatch_pixmap(int(w), int(h), step)
+    p.drawPixmap(0, 0, pm)
+
 
 # ══════════════════════════════════════════════════════════════
 #  PRIMITIVE WIDGETS
 # ══════════════════════════════════════════════════════════════
 class ArcGauge(QWidget):
-    """Concentric double-semicircle arc gauge.
-    Outer arc: plan (included) credit remaining.
-    Inner arc: bonus credit remaining (hidden when bonus=0).
-    Both arcs share the same cx/cy center.
-    """
-    # Outer/inner arc stroke width and gap
+    """Concentric double-semicircle arc gauge with rounded ends."""
     _OUTER_SW = 9
     _INNER_SW = 6
-    _GAP      = 5   # gap between the two arcs
-
-    # extra widget padding to prevent glow clipping (tip glow r=14 + 2px margin)
-    _GLOW_PAD = 16
+    _GAP      = 5
+    _GLOW_PAD = 22   # increased: prevents glow clipping at arc top
 
     def __init__(self, size: int = 160):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
         pad = self._GLOW_PAD
-        # expand widget by glow radius to prevent clipping
-        self.setFixedSize(size + pad * 2, size // 2 + pad + 6)
-        self._outer_r = size // 2 - 8          # outer arc radius
-        self._inner_r = (self._outer_r
-                         - self._OUTER_SW // 2
-                         - self._GAP
-                         - self._INNER_SW // 2) # inner arc radius
-
-        # outer: plan remaining %
+        self.setFixedSize(size + pad * 2, size // 2 + pad + 10)
+        self._outer_r = size // 2 - 8
+        self._inner_r = (self._outer_r - self._OUTER_SW // 2
+                         - self._GAP - self._INNER_SW // 2)
         self._outer_pct   = 0.0
         self._outer_color = c("accent")
-
-        # inner: bonus remaining % (None = hidden)
-        self._inner_pct   = None   # None = hide inner arc and track entirely
+        self._inner_pct   = None
         self._inner_color = c("c_amber")
-
-        # center label (e.g. "73.2%" or "FREE")
         self._label_text  = ""
         self._label_color = c("accent")
 
-    # ── public API ────────────────────────────────────────────
     def set_value(self, pct: float, color: QColor = None):
-        """Set the outer (plan) arc value."""
         self._outer_pct   = max(0.0, min(100.0, pct))
         self._outer_color = color or c("accent")
         self.update()
 
     def set_bonus(self, pct: float | None, color: QColor = None):
-        """Set the inner (bonus) arc value. pct=None hides the inner arc entirely."""
         if pct is None:
             self._inner_pct = None
         else:
@@ -735,96 +731,84 @@ class ArcGauge(QWidget):
         self.update()
 
     def resize_arcs(self, outer_r: int):
-        """Recompute inner radius when outer radius changes (called from apply_scale)."""
         self._outer_r = outer_r
-        self._inner_r = (outer_r
-                         - self._OUTER_SW // 2
-                         - self._GAP
-                         - self._INNER_SW // 2)
+        self._inner_r = (outer_r - self._OUTER_SW // 2
+                         - self._GAP - self._INNER_SW // 2)
         self.update()
 
     def set_label(self, text: str, color: QColor = None):
-        """Set center label drawn inside the arc (e.g. '73.2%' or 'FREE')."""
         self._label_text  = text
         self._label_color = color or c("accent")
         self.update()
 
-    # ── helpers ───────────────────────────────────────────────
-    @staticmethod
-    def _make_donut_path(cx: int, cy: int, r: float, sw: float) -> QPainterPath:
-        """Build a semicircular donut clipping path."""
+    def _draw_track(self, p: QPainter, cx, cy, r, sw):
+        """Draw the empty track as a 180° arc with RoundCap — both ends are rounded."""
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(track_bg(), sw, Qt.SolidLine, Qt.RoundCap))
+        rect = QRectF(cx - r, cy - r, r * 2, r * 2)
+        p.drawArc(rect, 180 * 16, -180 * 16)
+        # Hatch overlay: clip to a donut region, then draw hatch
         outer_r = r + sw / 2
         inner_r = max(1.0, r - sw / 2)
-        path = QPainterPath()
-        path.moveTo(cx - outer_r, cy)
-        path.arcTo(QRectF(cx - outer_r, cy - outer_r, outer_r * 2, outer_r * 2), 180, -180)
-        path.lineTo(cx + inner_r, cy)
-        path.arcTo(QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2), 0, 180)
-        path.closeSubpath()
-        return path
-
-    def _draw_track(self, p: QPainter, cx: int, cy: int, r: float, sw: float):
-        """Draw the empty track (background fill + diagonal hatch)."""
-        path = self._make_donut_path(cx, cy, r, sw)
-        p.setClipPath(path)
-        p.setBrush(QBrush(track_bg())); p.setPen(Qt.NoPen)
-        p.drawPath(path)
+        clip = QPainterPath()
+        clip.moveTo(cx - outer_r, cy)
+        clip.arcTo(QRectF(cx - outer_r, cy - outer_r, outer_r * 2, outer_r * 2), 180, -180)
+        clip.lineTo(cx + inner_r, cy)
+        clip.arcTo(QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2), 0, 180)
+        clip.closeSubpath()
+        p.setClipPath(clip)
         _draw_hatch(p, self.width(), self.height(), step=5)
         p.setClipping(False)
 
-    def _draw_arc(self, p: QPainter, cx: int, cy: int, r: float, sw: float,
-                  pct: float, color: QColor):
-        """Draw filled arc + tip glow. At pct=0, show a dot at the start point (left end)."""
-        # ── pct=0: dot at start point (same philosophy as MiniBar min-width) ──
+    def _draw_arc(self, p: QPainter, cx, cy, r, sw, pct, color):
+        """Draw filled arc with RoundCap (rounded at both ends) + tip glow."""
         if pct <= 0:
-            # start point = 180° (left end)
-            tx = cx - r; ty = float(cy)
+            # At 0%: show a small dot at the start (left end)
+            tx = cx - r
+            ty = float(cy)
             dot_r = sw / 2
             glow = QRadialGradient(tx, ty, dot_r * 2.5)
             glow.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 160))
             glow.setColorAt(1, Qt.transparent)
-            p.setPen(Qt.NoPen); p.setBrush(QBrush(glow))
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(glow))
             p.drawEllipse(QPointF(tx, ty), dot_r * 2.5, dot_r * 2.5)
-            # center solid dot
-            p.setBrush(QBrush(color)); p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(color))
             p.drawEllipse(QPointF(tx, ty), dot_r, dot_r)
             return
         span = int(pct / 100 * 180)
         g = QLinearGradient(cx - r, 0, cx + r, 0)
-        g.setColorAt(0, color.darker(150)); g.setColorAt(1, color)
+        g.setColorAt(0, color.darker(150))
+        g.setColorAt(1, color)
         p.setPen(QPen(QBrush(g), sw, Qt.SolidLine, Qt.RoundCap))
         p.setBrush(Qt.NoBrush)
-        p.drawArc(int(cx - r), int(cy - r), int(r * 2), int(r * 2), 180 * 16, -span * 16)
-        # Tip glow
+        rect = QRectF(cx - r, cy - r, r * 2, r * 2)
+        p.drawArc(rect, 180 * 16, -span * 16)
+        # Tip glow at the arc end
         ang = (180 - pct / 100 * 180) * math.pi / 180
-        tx = cx + r * math.cos(ang); ty = cy - r * math.sin(ang)
+        tx = cx + r * math.cos(ang)
+        ty = cy - r * math.sin(ang)
         glow = QRadialGradient(tx, ty, 14)
         glow.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 130))
         glow.setColorAt(1, Qt.transparent)
-        p.setPen(Qt.NoPen); p.setBrush(QBrush(glow))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(glow))
         p.drawEllipse(QPointF(tx, ty), 14, 14)
 
-    # ── paint ─────────────────────────────────────────────────
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
-        w, h   = self.width(), self.height()
-        pad    = self._GLOW_PAD
-        # arc center: widget horizontal center, pad+6 above bottom
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        pad = self._GLOW_PAD
         cx = w // 2
         cy = h - pad - 6
-
-        # 1. outer track + arc (plan)
         self._draw_track(p, cx, cy, self._outer_r, self._OUTER_SW)
         self._draw_arc(p, cx, cy, self._outer_r, self._OUTER_SW,
                        self._outer_pct, self._outer_color)
-
-        # 2. inner track + arc (bonus) — only when pct is not None
         if self._inner_pct is not None:
             self._draw_track(p, cx, cy, self._inner_r, self._INNER_SW)
             self._draw_arc(p, cx, cy, self._inner_r, self._INNER_SW,
                            self._inner_pct, self._inner_color)
-
-        # 3. center label — drawn inside the arc opening
         if self._label_text:
             inner_r = self._inner_r if self._inner_pct is not None else self._outer_r
             font_px = max(10, min(22, int(inner_r * 0.52)))
@@ -833,54 +817,55 @@ class ArcGauge(QWidget):
             p.setPen(self._label_color)
             fm = p.fontMetrics()
             text_w = fm.horizontalAdvance(self._label_text)
-            # baseline aligned to cy (arc bottom center)
-            tx = cx - text_w // 2
-            ty = cy   # drawText baseline = arc bottom
-            p.drawText(tx, ty, self._label_text)
-
+            p.drawText(cx - text_w // 2, cy, self._label_text)
         p.end()
 
 
 class SegBar(QWidget):
-    """Horizontal segment bar with diagonal-hatch empty track."""
     def __init__(self, h: int = 7):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedHeight(h)
         self._segs: list[tuple[float, QColor]] = []
 
-    def set_segments(self, segs: list[tuple[float, QColor]]):
-        self._segs = segs; self.update()
+    def set_segments(self, segs):
+        self._segs = segs
+        self.update()
 
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
-        w, h = self.width(), self.height(); r = h / 2
-
-        # empty track hatch
-        clip = QPainterPath(); clip.addRoundedRect(QRectF(0,0,w,h), r, r)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        r = h / 2
+        clip = QPainterPath()
+        clip.addRoundedRect(QRectF(0, 0, w, h), r, r)
         p.setClipPath(clip)
-        p.setBrush(QBrush(track_bg())); p.setPen(Qt.NoPen)
-        p.drawRoundedRect(QRectF(0,0,w,h), r, r)
+        p.setBrush(QBrush(track_bg()))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(QRectF(0, 0, w, h), r, r)
         _draw_hatch(p, w, h, step=5)
         p.setClipping(False)
-
-        # filled segment
-        p.setPen(Qt.NoPen); x = 0.0
+        p.setPen(Qt.NoPen)
+        x = 0.0
         for frac, color in self._segs:
             fw = max(0.0, min(1.0, frac)) * w
-            if fw < 1: x += fw; continue
-            sc = QPainterPath(); sc.addRoundedRect(QRectF(x,0,fw,h), r, r)
+            if fw < 1:
+                x += fw
+                continue
+            sc = QPainterPath()
+            sc.addRoundedRect(QRectF(x, 0, fw, h), r, r)
             p.setClipPath(sc)
-            g = QLinearGradient(x, 0, x+fw, 0)
-            g.setColorAt(0, color.darker(130)); g.setColorAt(1, color)
+            g = QLinearGradient(x, 0, x + fw, 0)
+            g.setColorAt(0, color.darker(130))
+            g.setColorAt(1, color)
             p.setBrush(QBrush(g))
-            p.drawRoundedRect(QRectF(x,0,fw,h), r, r)
-            p.setClipping(False); x += fw
+            p.drawRoundedRect(QRectF(x, 0, fw, h), r, r)
+            p.setClipping(False)
+            x += fw
         p.end()
 
 
 class MiniBar(QWidget):
-    """Solid horizontal bar with diagonal-hatch empty track."""
     def __init__(self, h: int = 4):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -894,25 +879,32 @@ class MiniBar(QWidget):
         self.update()
 
     def paintEvent(self, _):
-        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
-        w, h = self.width(), self.height(); r = h / 2
-
-        # empty track hatch
-        clip = QPainterPath(); clip.addRoundedRect(QRectF(0,0,w,h), r, r)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        r = h / 2
+        clip = QPainterPath()
+        clip.addRoundedRect(QRectF(0, 0, w, h), r, r)
         p.setClipPath(clip)
-        p.setBrush(QBrush(track_bg())); p.setPen(Qt.NoPen)
-        p.drawRoundedRect(QRectF(0,0,w,h), r, r)
+        p.setBrush(QBrush(track_bg()))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(QRectF(0, 0, w, h), r, r)
         _draw_hatch(p, w, h, step=4)
         p.setClipping(False)
-
-        # filled bar
-        fw = max(r*2, w * self._frac)
-        fc = QPainterPath(); fc.addRoundedRect(QRectF(0,0,fw,h), r, r)
+        # At frac=0, show only hatch track (no filled bar)
+        if self._frac <= 0:
+            p.end()
+            return
+        fw = max(r * 2, w * self._frac)
+        fc = QPainterPath()
+        fc.addRoundedRect(QRectF(0, 0, fw, h), r, r)
         p.setClipPath(fc)
-        g = QLinearGradient(0,0,fw,0)
-        g.setColorAt(0, self._color.darker(140)); g.setColorAt(1, self._color)
-        p.setBrush(QBrush(g)); p.setPen(Qt.NoPen)
-        p.drawRoundedRect(QRectF(0,0,fw,h), r, r)
+        g = QLinearGradient(0, 0, fw, 0)
+        g.setColorAt(0, self._color.darker(140))
+        g.setColorAt(1, self._color)
+        p.setBrush(QBrush(g))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(QRectF(0, 0, fw, h), r, r)
         p.setClipping(False)
         p.end()
 
