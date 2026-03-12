@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.0-beta.3 — 2026-03-12
+
+### UI
+- **Mini mode (credits)**: Section headers (Included / Bonus / Extra) shown above the first bar of each group; dollar amount shown on the last bar only (overflow bars no longer repeat the amount on every segment). Narrower amount column (56px); header and amount labels both scale with window DPI.
+
+---
+
 ## v1.0.0-beta.2 — 2026-03-10
 
 ### Features
