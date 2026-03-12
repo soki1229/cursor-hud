@@ -9,7 +9,7 @@ All screenshots of Cursor HUD across themes and tabs.
 ![Credits (Pro)](assets/dark/credits_pro.jpg)
 ![Credits (Enterprise)](assets/dark/credits_enterprise.jpg)
 ![Profile](assets/dark/profile_pro.jpg)
-![Settings](assets/dark/settings.jpg)
+![Settings](assets/dark/settings_pro.jpg)
 
 ## Light
 
