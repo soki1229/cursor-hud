@@ -156,7 +156,7 @@ THEMES: dict[str, dict] = {
     },
 }
 
-_THEME: dict = THEMES["dark"]
+_THEME: dict = THEMES["light"]
 
 
 def TH() -> dict:
@@ -175,7 +175,7 @@ def c(key: str) -> QColor:
 
 def apply_theme(name: str):
     global _THEME
-    _THEME = THEMES.get(name, THEMES["dark"])
+    _THEME = THEMES.get(name, THEMES["light"])
 
 
 def hatch_alpha() -> int:
@@ -329,7 +329,7 @@ STRINGS: dict[str, dict[str, str]] = {
 }
 
 DEFAULT_SETTINGS: dict = {
-    "lang": "ko", "theme": "dark",
+    "lang": "en", "theme": "light",
     "show_personal": True, "show_org": True, "show_official": True,
     "pin_on_top": True,
     "win_x": None, "win_y": None, "win_w": WIN_W, "mini_mode": False,
@@ -354,7 +354,7 @@ def save_settings(s: dict):
 
 
 def S(settings: dict, key: str) -> str:
-    lang = settings.get("lang", "ko")
+    lang = settings.get("lang", "en")
     return STRINGS.get(lang, STRINGS["ko"]).get(key, key)
 
 
@@ -1388,7 +1388,7 @@ class CreditsPage(QWidget):
             self._arc.set_label("FREE", c("accent"))
             self._hero_used.hide()
             self._hero_of.hide()
-            _lang = self.settings.get("lang", "ko")
+            _lang = self.settings.get("lang", "en")
             self._cycle_lbl.setText(days_left_text(cyc["end"], _lang))
             mu = c("t_dim").name()
             self._status_badge.setText("● Free")
@@ -1411,7 +1411,7 @@ class CreditsPage(QWidget):
 
         incl_remain_pct = cr["incl_remain_pct"]
         bonus_used = cr["bonus_used"]
-        _lang = self.settings.get("lang", "ko")
+        _lang = self.settings.get("lang", "en")
 
         # ── Arc + Hero: 3-phase credit display ────────────────────────
         # Priority order (highest = most urgent for user):
@@ -1601,7 +1601,7 @@ class SettingsPage(QWidget):
     TOGGLES_PIN  = [("pin_on_top", "pin_top")]
     STARTUP_KEY  = "startup_boot"
     THEMES_ORDER = [
-        ("dark", "theme_dark"), ("light", "theme_light"),
+        ("light", "theme_light"), ("dark", "theme_dark"),
         ("midnight", "theme_midnight"), ("matrix", "theme_matrix"),
     ]
 
@@ -1639,7 +1639,7 @@ class SettingsPage(QWidget):
         for code, lkey in [("en", "lang_en"), ("ko", "lang_ko")]:
             btn = QPushButton(self.T(lkey))
             btn.setCheckable(True)
-            btn.setChecked(self.settings.get("lang", "ko") == code)
+            btn.setChecked(self.settings.get("lang", "en") == code)
             btn.setFixedHeight(22)
             btn.setStyleSheet(_pill_btn_qss())
             btn.clicked.connect(lambda _, lc=code: self._set_lang(lc))
@@ -1652,7 +1652,7 @@ class SettingsPage(QWidget):
         # Theme
         self._t["theme_label"] = ql(self.T("theme_label"), 8, c("t_muted"))
         cl.addWidget(self._t["theme_label"])
-        cur_theme = self.settings.get("theme", "dark")
+        cur_theme = self.settings.get("theme", "light")
         rows = [QWidget(), QWidget()]
         for r in rows:
             r.setAttribute(Qt.WA_TranslucentBackground)
@@ -1715,7 +1715,7 @@ class SettingsPage(QWidget):
             if key.startswith("lang_") and key != "lang_label":
                 lang_code = key[len("lang_"):]
                 widget.setText(self.T(key))
-                widget.setChecked(self.settings.get("lang", "ko") == lang_code)
+                widget.setChecked(self.settings.get("lang", "en") == lang_code)
             elif key.startswith("theme_"):
                 tname = key[6:]
                 tkey = next((tk for tn, tk in self.THEMES_ORDER if tn == tname), None)
@@ -1802,7 +1802,7 @@ class SettingsPage(QWidget):
             btn = self._t.get(f"lang_{code}")
             if btn:
                 btn.setStyleSheet(_pill_btn_qss())
-        cur_theme = self.settings.get("theme", "dark")
+        cur_theme = self.settings.get("theme", "light")
         for tname, _ in self.THEMES_ORDER:
             btn = self._t.get(f"theme_{tname}")
             if btn:
@@ -2085,7 +2085,7 @@ class HUDWindow(QMainWindow):
         self.setWindowTitle("Cursor HUD")
         self._mock_file = mock_file
         self.settings   = load_settings()
-        apply_theme(self.settings.get("theme", "dark"))
+        apply_theme(self.settings.get("theme", "light"))
         self._pin_on_top = self.settings.get("pin_on_top", True)
         self._mini_mode  = False
         flags = Qt.FramelessWindowHint
@@ -2389,7 +2389,7 @@ class HUDWindow(QMainWindow):
 
     def _cycle_theme(self):
         themes = [tn for tn, _ in self._pg_settings.THEMES_ORDER]
-        cur = self.settings.get("theme", "dark")
+        cur = self.settings.get("theme", "light")
         nxt = themes[(themes.index(cur) + 1) % len(themes)] if cur in themes else themes[0]
         self._pg_settings._set_theme(nxt)
 
@@ -2461,11 +2461,10 @@ class HUDWindow(QMainWindow):
         self._pg_credits.set_error("")
         self._status.set_status("mock" if self._mock_file else "ok")
         cr = d["credit"]
-        log.info("%sdata updated — spent %s/%s (%.1f%%) remain %.1f%% bonus %s",
-                 "[MOCK] " if self._mock_file else "",
-                 usd(cr["budget_used"]), usd(cr["budget_total"]),
-                 cr["budget_pct"], cr["incl_remain_pct"],
-                 usd(cr["bonus_used"]))
+        od = d["on_demand"]
+        # Format: spent base_used$/base_total$ (pct%),\tbonus bonus$\t+ extra overage$
+        msg = (f"{'[MOCK] ' if self._mock_file else ''}data updated — ({cr['budget_pct']:.1f}%) | {usd(cr['budget_used'])} | {usd(cr['bonus_used'])} | {usd(od['personal'])} |")
+        log.info("%s", msg)
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
         # Update tray tooltip with credit remaining
@@ -2820,7 +2819,7 @@ def main():
     app.setQuitOnLastWindowClosed(True)  # close window = quit app (tray is supplementary)
 
     init_settings = load_settings()
-    apply_theme(init_settings.get("theme", "dark"))
+    apply_theme(init_settings.get("theme", "light"))
     app.setStyleSheet(
         "QScrollBar:vertical{background:transparent;width:4px;margin:0;}"
         f"QScrollBar::handle:vertical{{background:{TH()['scrollbar']};"
