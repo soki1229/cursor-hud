@@ -14,7 +14,7 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 | `USAGE METRICS`      | `_UsageMetrics` — local-only counters, never sent                        |
 | `THEME SYSTEM`       | `THEMES`, `c()`, `apply_theme()`, `TH()`, `track_bg()`                  |
 | `QSS HELPERS`        | `_icon_btn_qss()`, `_pill_btn_qss()`, `_theme_btn_qss()`                |
-| `CONSTANTS`          | `BASE_URL`, `WIN_W`, `WIN_H`, `REFRESH_MS`                              |
+| `CONSTANTS`          | `VERSION`, `BASE_URL`, `WIN_W`, `WIN_H`, `REFRESH_MS`                   |
 | `I18N`               | `STRINGS` (ko/en), `DEFAULT_SETTINGS`, `load_settings()`, `S()`         |
 | `TOKEN / DB`         | `_cursor_db_path()`, `decode_jwt()`, `read_cursor_token()`, `api_headers()` |
 | `DATA FETCHER`       | `DataFetcher(QThread)` — calls `/api/usage-summary` + `/api/auth/me`     |

@@ -233,6 +233,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
+VERSION   = "1.0.0-beta.3"
 BASE_URL  = "https://cursor.com"
 WIN_W     = 400
 WIN_W_MAX = 500
@@ -1066,7 +1067,7 @@ class DebugDialog(QDialog):
         vl.setSpacing(8)
 
         for line in [
-            f"CursorHUD v4.1  ·  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"CursorHUD {VERSION}  ·  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"Python {sys.version.split()[0]}  ·  "
             f"{'EXE (frozen)' if getattr(sys, 'frozen', False) else 'Script'}",
             f"Log → {LOG_FILE}",

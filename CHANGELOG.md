@@ -5,6 +5,16 @@
 ### UI
 - **Mini mode (credits)**: Section headers (Included / Bonus / Extra) shown above the first bar of each group; dollar amount shown on the last bar only (overflow bars no longer repeat the amount on every segment). Narrower amount column (56px); header and amount labels both scale with window DPI.
 
+### Docs & tooling
+- Claude rules and `CLAUDE.md`: project conventions, section map, context-sync rule.
+
+### Refactors
+- Default settings: language/theme default to `en` / `light`; theme order and fallbacks aligned.
+- Logging: consistent defaults and docstrings.
+
+### Chore
+- Project line endings normalized to LF; README fix.
+
 ---
 
 ## v1.0.0-beta.2 — 2026-03-10
