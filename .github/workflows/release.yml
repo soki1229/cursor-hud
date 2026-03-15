@@ -6,17 +6,12 @@ on:
       - "v*"
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -26,7 +21,78 @@ jobs:
       - name: Build EXE
         run: python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 
-      # Extract release notes from CHANGELOG for this tag (e.g. ## v1.0.0-beta.1 ... until next ## or EOF)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/CursorHUD.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyinstaller pyqt5 requests
+
+      # --windowed (no --onefile) produces dist/CursorHUD.app bundle
+      - name: Build .app
+        run: python -m PyInstaller --windowed --name CursorHUD cursor_hud.py
+
+      - name: Zip .app bundle
+        run: zip -r CursorHUD-macOS.zip dist/CursorHUD.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: CursorHUD-macOS.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libxcb-xinerama0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0 \
+            libgl1
+          pip install pyinstaller pyqt5 requests
+
+      - name: Build binary
+        run: python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
+
+      - name: Rename binary
+        run: mv dist/CursorHUD dist/CursorHUD-Linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: dist/CursorHUD-Linux
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Extract release notes for this tag from CHANGELOG (## vX.Y.Z … until next ## or EOF)
       - name: Prepare release notes
         shell: bash
         run: |
@@ -43,4 +109,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: release_notes.md
-          files: dist/CursorHUD.exe
+          files: |
+            artifacts/windows-build/CursorHUD.exe
+            artifacts/macos-build/CursorHUD-macOS.zip
+            artifacts/linux-build/CursorHUD-Linux
