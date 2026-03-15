@@ -16,6 +16,17 @@
 - `parse_data()` now extracts `team_id` (tries `teamId`, `organizationId`, `id` across
   summary and profile responses) and `is_enterprise` flag.
 
+### Fixes
+- **CSV export without Team ID**: The "Export CSV" button no longer requires a
+  Team ID to be set. When no Team ID is configured the endpoint is called without
+  `teamId`, which returns the current user's personal usage events (On-Demand).
+  Providing a Team ID in Settings still exports aggregate team usage as before.
+- Settings page placeholder updated (`"optional — blank = personal data"`) to
+  communicate that the field is not required.
+- `CsvFetcher`: `teamId` parameter is omitted from the HTTP request when the
+  value is empty (previously it sent `teamId=` which is the same as omitting it,
+  but the code is now explicit).
+
 ---
 
 ## v1.0.0-beta.5 — 2026-03-15

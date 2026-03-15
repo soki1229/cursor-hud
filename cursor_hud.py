@@ -304,7 +304,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "csv_err_no_team": "팀 ID를 찾을 수 없습니다. 설정에서 직접 입력해 주세요.",
         "csv_err_fetch": "CSV 다운로드 실패", "csv_saved": "저장 완료",
         "csv_team_id_label": "팀 ID (CSV 내보내기)",
-        "csv_team_id_placeholder": "자동 감지",
+        "csv_team_id_placeholder": "선택 사항 — 비워두면 개인 데이터",
     },
     "en": {
         "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
@@ -346,7 +346,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "csv_err_no_team": "Team ID not found. Enter it manually in Settings.",
         "csv_err_fetch": "CSV download failed", "csv_saved": "Saved",
         "csv_team_id_label": "Team ID (CSV export)",
-        "csv_team_id_placeholder": "auto-detect",
+        "csv_team_id_placeholder": "optional — blank = personal data",
     },
 }
 
@@ -645,12 +645,13 @@ class CsvFetcher(QThread):
                 self.error.emit("No auth token found.")
                 return
             params = {
-                "teamId":       self._team_id,
                 "isEnterprise": str(self._is_enterprise).lower(),
                 "startDate":    self._start_ms,
                 "endDate":      self._end_ms,
                 "strategy":     "tokens",
             }
+            if self._team_id:
+                params["teamId"] = self._team_id
             hdrs = api_headers(cookie)
             hdrs["Accept"] = "text/csv,*/*"
             r = requests.get(
@@ -2584,14 +2585,15 @@ class HUDWindow(QMainWindow):
             QMessageBox.warning(self, "CursorHUD",
                                 S(self.settings, "csv_err_fetch"))
             return
-        # Settings override takes priority over auto-detected value
+        # Settings override takes priority over auto-detected value.
+        # teamId is optional: omitting it returns personal usage data only;
+        # providing a team ID returns all team members' usage.
         team_id = self.settings.get("csv_team_id", "").strip() or d.get("team_id", "")
-        if not team_id:
-            QMessageBox.warning(self, "CursorHUD",
-                                S(self.settings, "csv_err_no_team"))
-            return
-        log.info("CSV export — teamId=%s (source=%s)", team_id,
-                 "settings" if self.settings.get("csv_team_id", "").strip() else "auto")
+        if team_id:
+            log.info("CSV export — teamId=%s (source=%s)", team_id,
+                     "settings" if self.settings.get("csv_team_id", "").strip() else "auto")
+        else:
+            log.info("CSV export — personal data (no teamId)")
 
         cyc = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
@@ -2622,7 +2624,7 @@ class HUDWindow(QMainWindow):
         self._csv_fetcher.error.connect(self._on_csv_error)
         self._csv_fetcher.start()
         log.info("CsvFetcher started — teamId=%s start=%d end=%d",
-                 team_id, start_ms, end_ms)
+                 team_id or "(personal)", start_ms, end_ms)
 
     def _on_csv_ready(self, text: str, path: str):
         self._pg_credits._csv_btn.setEnabled(True)
