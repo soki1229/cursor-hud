@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0.0-beta.5 — 2026-03-15
+
+### Fixes
+- **Font warning eliminated**: replaced all hardcoded `Segoe UI` / `Consolas` references
+  with platform-appropriate constants (`_UI_FONT`, `_MONO_FONT`).
+  - Windows: `Segoe UI` / `Consolas` (unchanged)
+  - macOS: `Helvetica Neue` / `Menlo`
+  - Linux: `DejaVu Sans` / `DejaVu Sans Mono`
+  Eliminates the 88 ms Qt alias-lookup penalty on macOS/Linux at startup.
+
+### Build
+- **macOS bundle size** reduced from 79 MB to 69 MB by removing unused Qt frameworks
+  (`QtQuick`, `QtQml`, `QtQmlModels`, `QtNetwork`, `QtWebSockets`) post-build.
+  `QtPrintSupport` is retained as it is a required dependency of the cocoa platform plugin.
+  CI workflow updated with a "Strip unused Qt frameworks" step.
+
+---
+
 ## v1.0.0-beta.4 — 2026-03-15
 
 ### Features

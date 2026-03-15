@@ -108,6 +108,12 @@ python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 ```bash
 pip install pyinstaller
 python -m PyInstaller --windowed --name CursorHUD cursor_hud.py
+# Remove unused Qt frameworks to reduce bundle size
+# (QtPrintSupport must be kept — required by the cocoa platform plugin)
+QT5_LIB="dist/CursorHUD.app/Contents/Frameworks/PyQt5/Qt5/lib"
+for fw in QtQuick QtQml QtQmlModels QtNetwork QtWebSockets; do
+  rm -rf "${QT5_LIB}/${fw}.framework"
+done
 zip -r CursorHUD-macOS.zip dist/CursorHUD.app
 ```
 
