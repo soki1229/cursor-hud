@@ -42,6 +42,17 @@ jobs:
       - name: Build .app
         run: python -m PyInstaller --windowed --name CursorHUD cursor_hud.py
 
+      # Remove unused Qt frameworks not needed by the app.
+      # QtPrintSupport must be kept — it is a required dependency of the cocoa platform plugin.
+      - name: Strip unused Qt frameworks
+        run: |
+          QT5_LIB="dist/CursorHUD.app/Contents/Frameworks/PyQt5/Qt5/lib"
+          rm -rf "${QT5_LIB}/QtQuick.framework"
+          rm -rf "${QT5_LIB}/QtQml.framework"
+          rm -rf "${QT5_LIB}/QtQmlModels.framework"
+          rm -rf "${QT5_LIB}/QtNetwork.framework"
+          rm -rf "${QT5_LIB}/QtWebSockets.framework"
+
       - name: Zip .app bundle
         run: zip -r CursorHUD-macOS.zip dist/CursorHUD.app
 
