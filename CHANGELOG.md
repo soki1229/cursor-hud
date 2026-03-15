@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0.0-beta.6 — Unreleased
+
+### Features
+- **Export CSV**: "Export CSV" button added at the bottom of the Credits page.
+  - Calls `GET /api/dashboard/export-usage-events-csv` with the current billing
+    cycle's start/end dates and the team ID extracted from the API response.
+  - Parameters: `teamId`, `isEnterprise`, `startDate`/`endDate` (ms timestamps),
+    `strategy=tokens`.
+  - Opens a native file-save dialog (defaults to `~/Downloads/cursor_usage_<start>_<end>.csv`).
+  - Button temporarily shows "Saved" / "…" feedback during fetch/write.
+  - `CsvFetcher(QThread)` runs the download off the main thread; errors are
+    surfaced via `QMessageBox`.
+- `_date_to_ms()` helper converts `YYYY-MM-DD` billing cycle strings to UTC ms timestamps.
+- `parse_data()` now extracts `team_id` (tries `teamId`, `organizationId`, `id` across
+  summary and profile responses) and `is_enterprise` flag.
+
+---
+
 ## v1.0.0-beta.5 — 2026-03-15
 
 ### Fixes

@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QMessageBox, QSizePolicy,
     QTextEdit, QDialog, QTabWidget, QSystemTrayIcon, QMenu, QAction,
-    QShortcut,
+    QShortcut, QFileDialog,
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QPointF, QSize, qInstallMessageHandler
 from PyQt5.QtGui import (
@@ -233,7 +233,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.5"
+VERSION   = "1.0.0-beta.6"
 BASE_URL  = "https://cursor.com"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
@@ -300,6 +300,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "debug_copy": "복사", "debug_close": "닫기",
         "startup_boot": "부팅 시 자동실행", "pin_top": "항상 위",
         "tray_show": "열기", "tray_refresh": "새로고침", "tray_quit": "종료",
+        "csv_export": "CSV 내보내기", "csv_save_title": "사용 이벤트 CSV 저장",
+        "csv_err_no_team": "팀 ID를 찾을 수 없습니다. 로그인 후 새로고침 해주세요.",
+        "csv_err_fetch": "CSV 다운로드 실패", "csv_saved": "저장 완료",
     },
     "en": {
         "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
@@ -337,6 +340,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "debug_copy": "Copy", "debug_close": "Close",
         "startup_boot": "Start on Boot", "pin_top": "Always on Top",
         "tray_show": "Show", "tray_refresh": "Refresh", "tray_quit": "Quit",
+        "csv_export": "Export CSV", "csv_save_title": "Save Usage Events CSV",
+        "csv_err_no_team": "Team ID not found. Please refresh after signing in.",
+        "csv_err_fetch": "CSV download failed", "csv_saved": "Saved",
     },
 }
 
@@ -574,17 +580,85 @@ def parse_data(raw: dict) -> dict:
     is_free = s.get("membershipType", "").lower() in ("free", "hobby")
     membership = s.get("membershipType", "").lower()
     is_team = membership in ("team", "enterprise", "business")
+    is_enterprise = membership == "enterprise"
+
+    # teamId for CSV export — try several paths (undocumented API, field name varies)
+    team_id = (
+        s.get("teamId") or
+        s.get("teamUsage", {}).get("teamId") or
+        pr.get("teamId") or
+        pr.get("organizationId") or
+        pr.get("id") or
+        ""
+    )
 
     return {
-        "cycle":      cycle,
-        "credit":     credit,
-        "on_demand":  on_demand,
-        "profile":    profile,
-        "hint":       s.get("autoModelSelectedDisplayMessage", "") or "",
-        "fetched_at": raw.get("fetched_at", ""),
-        "is_free":    is_free,
-        "is_team":    is_team,
+        "cycle":        cycle,
+        "credit":       credit,
+        "on_demand":    on_demand,
+        "profile":      profile,
+        "hint":         s.get("autoModelSelectedDisplayMessage", "") or "",
+        "fetched_at":   raw.get("fetched_at", ""),
+        "is_free":      is_free,
+        "is_team":      is_team,
+        "is_enterprise": is_enterprise,
+        "team_id":      str(team_id),
     }
+
+
+# ══════════════════════════════════════════════════════════════
+#  CSV FETCHER
+# ══════════════════════════════════════════════════════════════
+def _date_to_ms(date_str: str) -> int:
+    """Convert 'YYYY-MM-DD' to UTC millisecond timestamp (start of day)."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return 0
+
+
+class CsvFetcher(QThread):
+    """Download usage-events CSV from the Cursor dashboard API."""
+    ready = pyqtSignal(str)   # raw CSV text
+    error = pyqtSignal(str)
+
+    def __init__(self, team_id: str, start_ms: int, end_ms: int,
+                 is_enterprise: bool):
+        super().__init__()
+        self._team_id       = team_id
+        self._start_ms      = start_ms
+        self._end_ms        = end_ms
+        self._is_enterprise = is_enterprise
+
+    def run(self):
+        try:
+            cookie, _ = read_cursor_token()
+            if not cookie:
+                self.error.emit("No auth token found.")
+                return
+            params = {
+                "teamId":       self._team_id,
+                "isEnterprise": str(self._is_enterprise).lower(),
+                "startDate":    self._start_ms,
+                "endDate":      self._end_ms,
+                "strategy":     "tokens",
+            }
+            hdrs = api_headers(cookie)
+            hdrs["Accept"] = "text/csv,*/*"
+            r = requests.get(
+                f"{BASE_URL}/api/dashboard/export-usage-events-csv",
+                params=params, headers=hdrs, timeout=30, allow_redirects=True,
+            )
+            log.info("CsvFetcher → HTTP %s  len=%d", r.status_code,
+                     len(r.content))
+            if r.ok:
+                self.ready.emit(r.text)
+            else:
+                self.error.emit(f"HTTP {r.status_code}: {r.text[:120]}")
+        except Exception:
+            log.exception("CsvFetcher.run")
+            self.error.emit("Request failed — see log for details.")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1163,13 +1237,15 @@ class DebugDialog(QDialog):
 #  PAGE: CREDITS
 # ══════════════════════════════════════════════════════════════
 class CreditsPage(QWidget):
-    retry_clicked = pyqtSignal()
+    retry_clicked     = pyqtSignal()
+    export_csv_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.settings = settings
+        self.settings  = settings
         self._row_refs: dict[str, KVRow] = {}
+        self._last_data: dict | None = None
         self._build()
 
     def T(self, k):
@@ -1317,6 +1393,26 @@ class CreditsPage(QWidget):
         rl2.addWidget(self._hint_lbl)
         vl.addWidget(self._rate_card)
 
+        # CSV export row — small muted action link at the bottom of the scroll area
+        export_row = QWidget()
+        export_row.setAttribute(Qt.WA_TranslucentBackground)
+        exl = QHBoxLayout(export_row)
+        exl.setContentsMargins(4, 2, 4, 2)
+        exl.setSpacing(0)
+        exl.addStretch()
+        self._csv_btn = QPushButton(self.T("csv_export"))
+        self._csv_btn.setFixedHeight(20)
+        self._csv_btn.setCursor(Qt.PointingHandCursor)
+        self._csv_btn.setStyleSheet(
+            f"QPushButton{{color:{c('t_dim').name()};background:transparent;"
+            f"border:none;font-size:8px;font-family:{_UI_FONT};"
+            f"text-decoration:underline;padding:0 4px;}}"
+            f"QPushButton:hover{{color:{c('t_muted').name()};}}"
+        )
+        self._csv_btn.clicked.connect(self.export_csv_clicked)
+        exl.addWidget(self._csv_btn)
+        vl.addWidget(export_row)
+
     def _rebuild_labels(self):
         update_kv_label(self._row_refs["row_incl"],  self.T("row_incl"))
         update_kv_label(self._row_refs["row_bonus"], self.T("row_bonus"))
@@ -1330,6 +1426,7 @@ class CreditsPage(QWidget):
         set_lbl_color(self._hdr_org,      c("c_green"))
         set_lbl_color(self._hdr_rates,    c("accent2"))
         self._retry_btn.setText(self.T("err_retry"))
+        self._csv_btn.setText(self.T("csv_export"))
 
     @staticmethod
     def _bonus_tag_qss() -> str:
@@ -1388,6 +1485,7 @@ class CreditsPage(QWidget):
         self._arc.resize_arcs(arc_size // 2 - 8)
 
     def update_data(self, d: dict):
+        self._last_data = d
         cr = d["credit"]
         od = d["on_demand"]
         cyc = d["cycle"]
@@ -2282,6 +2380,8 @@ class HUDWindow(QMainWindow):
         self._stack.setAttribute(Qt.WA_TranslucentBackground)
         self._pg_credits  = CreditsPage(self.settings)
         self._pg_credits.retry_clicked.connect(self._fetch)
+        self._pg_credits.export_csv_clicked.connect(self._on_export_csv)
+        self._csv_fetcher: CsvFetcher | None = None
         self._pg_profile  = ProfilePage(self.settings)
         self._pg_settings = SettingsPage(self.settings)
         self._pg_settings.changed.connect(self._on_settings_changed)
@@ -2439,6 +2539,71 @@ class HUDWindow(QMainWindow):
         self._countdown = max(0, self._countdown - 1)
         self._status.set_countdown(self._countdown)
         self._status.set_clock(datetime.now().strftime("%H:%M:%S"))
+
+    def _on_export_csv(self):
+        """Handle Export CSV button: fetch CSV using current billing cycle dates."""
+        d = self._pg_credits._last_data
+        if not d:
+            QMessageBox.warning(self, "CursorHUD",
+                                S(self.settings, "csv_err_fetch"))
+            return
+        team_id = d.get("team_id", "")
+        if not team_id:
+            QMessageBox.warning(self, "CursorHUD",
+                                S(self.settings, "csv_err_no_team"))
+            return
+
+        cyc = d["cycle"]
+        start_ms = _date_to_ms(cyc["start"])
+        end_ms   = _date_to_ms(cyc["end"])
+        is_ent   = d.get("is_enterprise", False)
+
+        # Propose a default file name based on billing cycle
+        default_name = f"cursor_usage_{cyc['start']}_{cyc['end']}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, S(self.settings, "csv_save_title"),
+            str(Path.home() / "Downloads" / default_name),
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not path:
+            return  # user cancelled
+
+        self._pg_credits._csv_btn.setEnabled(False)
+        self._pg_credits._csv_btn.setText("…")
+
+        if self._csv_fetcher:
+            self._csv_fetcher.blockSignals(True)
+            self._csv_fetcher.quit()
+            self._csv_fetcher.wait(2000)
+            self._csv_fetcher.deleteLater()
+
+        self._csv_fetcher = CsvFetcher(team_id, start_ms, end_ms, is_ent)
+        self._csv_fetcher.ready.connect(lambda text, p=path: self._on_csv_ready(text, p))
+        self._csv_fetcher.error.connect(self._on_csv_error)
+        self._csv_fetcher.start()
+        log.info("CsvFetcher started — teamId=%s start=%d end=%d",
+                 team_id, start_ms, end_ms)
+
+    def _on_csv_ready(self, text: str, path: str):
+        self._pg_credits._csv_btn.setEnabled(True)
+        self._pg_credits._csv_btn.setText(S(self.settings, "csv_export"))
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+            log.info("CSV saved → %s (%d bytes)", path, len(text))
+            self._pg_credits._csv_btn.setText(S(self.settings, "csv_saved"))
+            QTimer.singleShot(3000, lambda: self._pg_credits._csv_btn.setText(
+                S(self.settings, "csv_export")))
+        except Exception as exc:
+            log.error("CSV write failed: %s", exc)
+            QMessageBox.critical(self, "CursorHUD",
+                                 f"{S(self.settings, 'csv_err_fetch')}: {exc}")
+
+    def _on_csv_error(self, msg: str):
+        self._pg_credits._csv_btn.setEnabled(True)
+        self._pg_credits._csv_btn.setText(S(self.settings, "csv_export"))
+        log.error("CsvFetcher error: %s", msg)
+        QMessageBox.warning(self, "CursorHUD",
+                            f"{S(self.settings, 'csv_err_fetch')}: {msg}")
 
     def _fetch(self):
         _metrics.inc("fetch")
