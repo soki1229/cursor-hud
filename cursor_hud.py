@@ -208,7 +208,7 @@ def _pill_btn_qss(active_color: str = None) -> str:
     return (
         f"QPushButton{{ color:{mu}; background:transparent;"
         f" border:1px solid rgba(128,128,128,0.28); border-radius:3px;"
-        f" font-size:9px; padding:1px 12px; font-family:Segoe UI; font-weight:600; }}"
+        f" font-size:9px; padding:1px 12px; font-family:{_UI_FONT}; font-weight:600; }}"
         f" QPushButton:checked{{ color:{ac}; border:1px solid {ac};"
         f" background:rgba(128,128,128,0.10); }}"
     )
@@ -222,7 +222,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
     return (
         f"QPushButton{{ color:{mu}; background:{bg_hex};"
         f" border:1px solid rgba(128,128,128,0.25); border-radius:5px;"
-        f" font-size:9px; font-family:Segoe UI; font-weight:600; }}"
+        f" font-size:9px; font-family:{_UI_FONT}; font-weight:600; }}"
         f" QPushButton:checked{{ color:{ac_hex}; border:2px solid {ac_hex};"
         f" background:rgba({av[0]},{av[1]},{av[2]},25); }}"
         f" QPushButton:hover{{ border:1px solid rgba(128,128,128,0.50); }}"
@@ -233,8 +233,19 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.4"
+VERSION   = "1.0.0-beta.5"
 BASE_URL  = "https://cursor.com"
+
+# Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
+if sys.platform == "win32":
+    _UI_FONT   = "Segoe UI"
+    _MONO_FONT = "Consolas"
+elif sys.platform == "darwin":
+    _UI_FONT   = "Helvetica Neue"
+    _MONO_FONT = "Menlo"
+else:
+    _UI_FONT   = "DejaVu Sans"
+    _MONO_FONT = "DejaVu Sans Mono"
 WIN_W     = 400
 WIN_W_MAX = 500
 WIN_H     = 660
@@ -629,7 +640,7 @@ def remain_color(remain_pct: float) -> QColor:
 
 
 def ql(text: str = "", size: int = 10, color: QColor = None, bold: bool = False,
-        align=Qt.AlignLeft, family: str = "Segoe UI") -> QLabel:
+        align=Qt.AlignLeft, family: str = _UI_FONT) -> QLabel:
     w = QLabel(text)
     f = QFont(family, size)
     f.setBold(bold)
@@ -813,7 +824,7 @@ class ArcGauge(QWidget):
         if self._label_text:
             inner_r = self._inner_r if self._inner_pct is not None else self._outer_r
             font_px = max(10, min(22, int(inner_r * 0.52)))
-            font = QFont("Segoe UI", font_px, QFont.Bold)
+            font = QFont(_UI_FONT, font_px, QFont.Bold)
             p.setFont(font)
             p.setPen(self._label_color)
             fm = p.fontMetrics()
@@ -1013,7 +1024,7 @@ def kv_row(parent_layout, label: str) -> KVRow:
     lw.setWordWrap(False)
     lw.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
     vw = QLabel("—")
-    vw.setFont(QFont("Segoe UI", 9, QFont.Bold))
+    vw.setFont(QFont(_UI_FONT, 9, QFont.Bold))
     vw.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
     vw.setWordWrap(False)
     vw.setTextInteractionFlags(Qt.NoTextInteraction)
@@ -1075,7 +1086,7 @@ class DebugDialog(QDialog):
             f"Cursor DB → {_cursor_db_path()}",
         ]:
             lb = QLabel(line)
-            lb.setFont(QFont("Consolas", 8))
+            lb.setFont(QFont(_MONO_FONT, 8))
             lb.setStyleSheet(f"color:{c('t_muted').name()};background:transparent;")
             vl.addWidget(lb)
 
@@ -1094,7 +1105,7 @@ class DebugDialog(QDialog):
         def _make_text(content: str) -> QTextEdit:
             t = QTextEdit()
             t.setReadOnly(True)
-            t.setFont(QFont("Consolas", 8))
+            t.setFont(QFont(_MONO_FONT, 8))
             t.setStyleSheet(
                 f"background:{c('bg_card').name()};color:{c('t_body').name()};"
                 "border:none;border-radius:6px;padding:6px;"
@@ -1327,7 +1338,7 @@ class CreditsPage(QWidget):
             f"color:{amber.name()};"
             f"background:rgba({amber.red()},{amber.green()},{amber.blue()},22);"
             f"border:1px solid rgba({amber.red()},{amber.green()},{amber.blue()},70);"
-            "border-radius:5px;font-size:10px;font-family:Segoe UI;font-weight:700;"
+            f"border-radius:5px;font-size:10px;font-family:{_UI_FONT};font-weight:700;"
             "padding:0 8px;"
         )
 
@@ -1358,13 +1369,13 @@ class CreditsPage(QWidget):
         self._retry_btn.setStyleSheet(_pill_btn_qss(c("c_red").name()))
 
     def apply_scale(self, scale: float, arc_size: int = None):
-        self._hero_used.setFont(QFont("Segoe UI", max(8, int(11 * scale)), QFont.Bold))
-        self._hero_of.setFont(QFont("Segoe UI", max(7, int(9 * scale))))
-        self._cycle_lbl.setFont(QFont("Segoe UI", max(7, int(8 * scale))))
+        self._hero_used.setFont(QFont(_UI_FONT, max(8, int(11 * scale)), QFont.Bold))
+        self._hero_of.setFont(QFont(_UI_FONT, max(7, int(9 * scale))))
+        self._cycle_lbl.setFont(QFont(_UI_FONT, max(7, int(8 * scale))))
         kv_px = max(7, int(9 * scale))
         for lw, vw in self._row_refs.values():
-            vw.setFont(QFont("Segoe UI", kv_px, QFont.Bold))
-            lw.setFont(QFont("Segoe UI", kv_px))
+            vw.setFont(QFont(_UI_FONT, kv_px, QFont.Bold))
+            lw.setFont(QFont(_UI_FONT, kv_px))
         sec_px = max(7, int(8 * scale))
         for hdr in [self._hdr_personal, self._hdr_org, self._hdr_rates]:
             f = hdr.font()
@@ -1395,7 +1406,7 @@ class CreditsPage(QWidget):
             self._status_badge.setText("● Free")
             self._status_badge.setStyleSheet(
                 f"color:{mu};background:transparent;"
-                "font-size:10px;font-family:Segoe UI;font-weight:700;"
+                f"font-size:10px;font-family:{_UI_FONT};font-weight:700;"
             )
             self._org_card.hide()
             self._rate_card.hide()
@@ -1478,7 +1489,7 @@ class CreditsPage(QWidget):
         self._status_badge.setText(f"● {badge_text}")
         self._status_badge.setStyleSheet(
             f"color:{badge_color.name()};background:transparent;"
-            "font-size:10px;font-family:Segoe UI;font-weight:700;letter-spacing:0.3px;"
+            f"font-size:10px;font-family:{_UI_FONT};font-weight:700;letter-spacing:0.3px;"
         )
 
         show_personal = cfg.get("show_personal", True)
@@ -1869,14 +1880,14 @@ class StatusBar(QWidget):
         self._clock_lbl = QLabel("—")
         self._clock_lbl.setStyleSheet(
             f"color:{c('t_muted').name()};font-size:9px;"
-            "background:transparent;font-family:Consolas;")
+            f"background:transparent;font-family:{_MONO_FONT};")
         hl.addWidget(self._clock_lbl)
         hl.addStretch()
 
         self._cd_lbl = QLabel("")
         self._cd_lbl.setStyleSheet(
             f"color:{c('t_dim').name()};font-size:8px;"
-            "background:transparent;font-family:Segoe UI;")
+            f"background:transparent;font-family:{_UI_FONT};")
         hl.addWidget(self._cd_lbl)
 
         self._dbg_btn = QPushButton(S(settings, "debug_btn"))
@@ -1937,10 +1948,10 @@ class StatusBar(QWidget):
         self.set_status(self._last_state)
         self._clock_lbl.setStyleSheet(
             f"color:{c('t_muted').name()};font-size:9px;"
-            "background:transparent;font-family:Consolas;")
+            f"background:transparent;font-family:{_MONO_FONT};")
         self._cd_lbl.setStyleSheet(
             f"color:{c('t_dim').name()};font-size:8px;"
-            "background:transparent;font-family:Segoe UI;")
+            f"background:transparent;font-family:{_UI_FONT};")
         mu = c("t_dim").name()
         self._dbg_btn.setStyleSheet(
             f"QPushButton{{ color:{mu}; background:transparent;"
@@ -1987,7 +1998,7 @@ class NavBar(QWidget):
         mu = c("t_muted").name()
         btn.setStyleSheet(
             f"QPushButton{{ color:{mu}; background:transparent; border:none;"
-            f" border-bottom:2px solid transparent; font-family:Segoe UI;"
+            f" border-bottom:2px solid transparent; font-family:{_UI_FONT};"
             f" font-size:9px; font-weight:600; letter-spacing:0.5px; padding:0 4px; }}"
             f" QPushButton:checked{{ color:{ac}; border-bottom:2px solid {ac}; }}"
             f" QPushButton:hover{{ color:rgba(170,185,215,180); }}"
@@ -2143,7 +2154,7 @@ class HUDWindow(QMainWindow):
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(2, 2, 28, 28), 6, 6)
         p.setPen(QPen(QColor(255, 255, 255), 2))
-        p.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        p.setFont(QFont(_UI_FONT, 14, QFont.Bold))
         p.drawText(QRectF(0, 0, 32, 32), Qt.AlignCenter, "C")
         p.end()
         self._tray.setIcon(QIcon(pm))
@@ -2221,7 +2232,7 @@ class HUDWindow(QMainWindow):
         tl.addWidget(self._logo)
         self._title_lbl = QLabel("CursorHUD")
         self._title_lbl.setStyleSheet(
-            f"color:{c('t_bright').name()};font-family:Segoe UI;font-size:10px;"
+            f"color:{c('t_bright').name()};font-family:{_UI_FONT};font-size:10px;"
             "font-weight:600;letter-spacing:2px;background:transparent;")
         tl.addWidget(self._title_lbl)
         tl.addStretch()
@@ -2330,7 +2341,7 @@ class HUDWindow(QMainWindow):
         self._logo.setStyleSheet(
             f"color:{c('accent').name()};font-size:13px;background:transparent;")
         self._title_lbl.setStyleSheet(
-            f"color:{c('t_bright').name()};font-family:Segoe UI;font-size:10px;"
+            f"color:{c('t_bright').name()};font-family:{_UI_FONT};font-size:10px;"
             "font-weight:600;letter-spacing:2px;background:transparent;")
         for btn, hc in self._win_btns:
             btn.setStyleSheet(_icon_btn_qss(hv=hc))
@@ -2538,7 +2549,7 @@ class HUDWindow(QMainWindow):
             vbox.setSpacing(1)
             # Header label (section title — hidden when empty)
             header_lbl = QLabel("")
-            header_lbl.setFont(QFont("Segoe UI", 8))
+            header_lbl.setFont(QFont(_UI_FONT, 8))
             header_lbl.setStyleSheet("background:transparent;")
             header_lbl.setMaximumHeight(0)
             vbox.addWidget(header_lbl)
@@ -2551,7 +2562,7 @@ class HUDWindow(QMainWindow):
             bar = MiniBar(h=6)
             bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             amount_lbl = QLabel("")
-            amount_lbl.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            amount_lbl.setFont(QFont(_UI_FONT, 9, QFont.Bold))
             amount_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             amount_lbl.setFixedWidth(56)
             amount_lbl.setStyleSheet("background:transparent;")
@@ -2670,7 +2681,7 @@ class HUDWindow(QMainWindow):
         self._logo.setStyleSheet(
             f"color:{c('accent').name()};font-size:13px;background:transparent;")
         self._title_lbl.setStyleSheet(
-            f"color:{c('t_bright').name()};font-family:Segoe UI;"
+            f"color:{c('t_bright').name()};font-family:{_UI_FONT};"
             "font-size:10px;font-weight:600;letter-spacing:2px;background:transparent;")
         if hasattr(self, "_pg_credits"):
             arc_size = max(90, min(180, int(150 * scale)))
