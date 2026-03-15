@@ -30,7 +30,7 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 | `STATUS BAR`         | `StatusBar` — countdown, log button                                       |
 | `NAV BAR`            | `NavBar` — Credits / Profile / Settings tabs                              |
 | `MAIN WINDOW`        | `HUDWindow` — drag, tray, shortcuts, data flow                           |
-| `PLATFORM HELPERS`   | `enable_dpi()`, `register_startup()`, `unregister_startup()`              |
+| `PLATFORM HELPERS`   | `enable_dpi()`, `register_startup()`, `unregister_startup()`, `_macos_launchagent_path()`, `_linux_autostart_path()` — cross-platform (win32/darwin/linux) |
 | `ENTRY POINT`        | `main()` — `--mock`, `--install-startup`, `--uninstall-startup`           |
 
 ## Color thresholds

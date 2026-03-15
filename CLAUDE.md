@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Cursor subscription credit monitor — always-on-top Windows HUD.
+Cursor subscription credit monitor — always-on-top HUD (Windows, macOS, Linux).
 
 ## Stack
 
@@ -39,6 +39,6 @@ python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 
 - **Never commit** `cursor_hud_settings.json` or `cursor_hud.log`.
 - **Redact** tokens/emails as `[REDACTED]` in any log or debug output.
-- `register_startup()` writes to Windows registry (`HKCU\...\Run`).
+- `register_startup()` is cross-platform: Windows → registry (`HKCU\...\Run`), macOS → `~/Library/LaunchAgents/com.cursor-hud.plist`, Linux → `~/.config/autostart/cursor-hud.desktop` (XDG-aware).
 - Refresh default 60 s; override with `CURSOR_REFRESH_MS` env var (min 5 s).
-- CI: `.github/workflows/release.yml` — `v*` tag → EXE → GitHub Release.
+- CI: `.github/workflows/release.yml` — `v*` tag → 3 parallel builds (Windows `.exe`, macOS `.app` zip, Linux binary) → single GitHub Release.
