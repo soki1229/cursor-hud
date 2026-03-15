@@ -233,7 +233,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.3"
+VERSION   = "1.0.0-beta.4"
 BASE_URL  = "https://cursor.com"
 WIN_W     = 400
 WIN_W_MAX = 500
@@ -424,7 +424,7 @@ def api_headers(cookie: str) -> dict:
         "Accept":       "application/json",
         "Origin":       "https://cursor.com",
         "Referer":      "https://cursor.com/",
-        "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0",
+        "User-Agent":   "Mozilla/5.0 (X11; Linux x86_64) Chrome/122.0.0.0",
     }
 
 
@@ -1697,11 +1697,10 @@ class SettingsPage(QWidget):
         self._t["pin_top"] = lbl
         self._sw_refs["pin_on_top"] = (row, lbl, sw)
 
-        if sys.platform == "win32":
-            row, lbl, _ = self._switch_row(
-                self.T("startup_boot"), "_startup", self._is_startup_registered())
-            cl.addWidget(row)
-            self._t["startup_boot"] = lbl
+        row, lbl, _ = self._switch_row(
+            self.T("startup_boot"), "_startup", self._is_startup_registered())
+        cl.addWidget(row)
+        self._t["startup_boot"] = lbl
         cl.addWidget(Divider())
 
         self._t["auto_saved"] = ql(self.T("auto_saved"), 8, c("t_dim"))
@@ -1777,19 +1776,22 @@ class SettingsPage(QWidget):
             sw.set_checked(value)
 
     def _is_startup_registered(self) -> bool:
-        if sys.platform != "win32":
-            return False
-        try:
-            import winreg
-            k = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0, winreg.KEY_READ)
-            winreg.QueryValueEx(k, "CursorHUD")
-            winreg.CloseKey(k)
-            return True
-        except Exception:
-            return False
+        if sys.platform == "win32":
+            try:
+                import winreg
+                k = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Run",
+                    0, winreg.KEY_READ)
+                winreg.QueryValueEx(k, "CursorHUD")
+                winreg.CloseKey(k)
+                return True
+            except Exception:
+                return False
+        elif sys.platform == "darwin":
+            return _macos_launchagent_path().exists()
+        else:
+            return _linux_autostart_path().exists()
 
     def refresh_theme(self):
         hdr = self._t.get("settings_title")
@@ -2733,47 +2735,116 @@ class HUDWindow(QMainWindow):
 #  PLATFORM HELPERS
 # ══════════════════════════════════════════════════════════════
 def enable_dpi():
-    if sys.platform != "win32":
-        return
-    try:
-        import ctypes
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except Exception:
+    if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.user32.SetProcessDPIAware()
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
         except Exception:
-            pass
+            try:
+                import ctypes
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+    # macOS and Linux: Qt handles DPI scaling via AA_EnableHighDpiScaling
+
+
+def _macos_launchagent_path() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / "com.cursor-hud.plist"
+
+
+def _linux_autostart_path() -> Path:
+    return Path(os.environ.get("XDG_CONFIG_HOME",
+                               str(Path.home() / ".config"))) / "autostart" / "cursor-hud.desktop"
 
 
 def register_startup(exe: str):
-    if sys.platform != "win32":
-        return
-    try:
-        import winreg
-        k = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "CursorHUD", 0, winreg.REG_SZ, exe)
-        winreg.CloseKey(k)
-    except Exception as e:
-        log.error("register_startup: %s", e)
+    if sys.platform == "win32":
+        try:
+            import winreg
+            k = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_SET_VALUE)
+            winreg.SetValueEx(k, "CursorHUD", 0, winreg.REG_SZ, exe)
+            winreg.CloseKey(k)
+        except Exception as e:
+            log.error("register_startup (win32): %s", e)
+
+    elif sys.platform == "darwin":
+        plist = _macos_launchagent_path()
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_text(
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cursor-hud</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{exe}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
+""",
+            encoding="utf-8",
+        )
+        log.info("register_startup (darwin): wrote %s", plist)
+
+    else:  # Linux / XDG
+        desktop = _linux_autostart_path()
+        desktop.parent.mkdir(parents=True, exist_ok=True)
+        desktop.write_text(
+            f"""[Desktop Entry]
+Type=Application
+Name=CursorHUD
+Exec={exe}
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+""",
+            encoding="utf-8",
+        )
+        log.info("register_startup (linux): wrote %s", desktop)
 
 
 def unregister_startup():
-    if sys.platform != "win32":
-        return
-    try:
-        import winreg
-        k = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE)
-        winreg.DeleteValue(k, "CursorHUD")
-        winreg.CloseKey(k)
-    except Exception as e:
-        log.error("unregister_startup: %s", e)
+    if sys.platform == "win32":
+        try:
+            import winreg
+            k = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_SET_VALUE)
+            winreg.DeleteValue(k, "CursorHUD")
+            winreg.CloseKey(k)
+        except Exception as e:
+            log.error("unregister_startup (win32): %s", e)
+
+    elif sys.platform == "darwin":
+        plist = _macos_launchagent_path()
+        try:
+            plist.unlink()
+            log.info("unregister_startup (darwin): removed %s", plist)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            log.error("unregister_startup (darwin): %s", e)
+
+    else:  # Linux / XDG
+        desktop = _linux_autostart_path()
+        try:
+            desktop.unlink()
+            log.info("unregister_startup (linux): removed %s", desktop)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            log.error("unregister_startup (linux): %s", e)
 
 
 # ══════════════════════════════════════════════════════════════
