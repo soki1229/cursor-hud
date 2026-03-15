@@ -2,6 +2,10 @@
 dist/
 build/
 *.spec
+CursorHUD-macOS.zip
+
+# Local test data
+mock_data.json
 
 # PyInstaller
 __pycache__/
