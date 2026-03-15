@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.0-beta.4 — 2026-03-15
+
+### Features
+- **Cross-platform support**: app now runs on macOS and Linux in addition to Windows.
+  - DB path: `~/Library/Application Support/Cursor/...` (macOS), `~/.config/Cursor/...` (Linux).
+  - Start on Boot: macOS uses a LaunchAgent plist (`~/Library/LaunchAgents/com.cursor-hud.plist`); Linux uses an XDG autostart `.desktop` file (`~/.config/autostart/cursor-hud.desktop`, `XDG_CONFIG_HOME`-aware). Windows registry unchanged.
+  - DPI awareness: Windows ctypes path preserved; macOS/Linux delegate to Qt `AA_EnableHighDpiScaling`.
+  - "Start on Boot" settings toggle now visible on all platforms.
+
+### CI
+- Release workflow split into three parallel build jobs (`build-windows`, `build-macos`, `build-linux`) + a single `release` job that waits for all three and uploads all artifacts to the GitHub Release.
+  - Windows: `CursorHUD.exe` (PyInstaller `--onefile --windowed`)
+  - macOS: `CursorHUD-macOS.zip` (`.app` bundle, `macos-latest` / Apple Silicon)
+  - Linux: `CursorHUD-Linux` (PyInstaller `--onefile --windowed`, XCB dependencies pre-installed)
+
+---
+
 ## v1.0.0-beta.3 — 2026-03-12
 
 ### UI

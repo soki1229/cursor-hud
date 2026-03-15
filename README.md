@@ -1,10 +1,10 @@
 # Cursor HUD
 
-> An always-on-top Windows desktop HUD for monitoring your [Cursor](https://cursor.com) subscription usage in real time.
+> An always-on-top desktop HUD for monitoring your [Cursor](https://cursor.com) subscription usage in real time.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
 ![PyQt5](https://img.shields.io/badge/PyQt5-5.15%2B-green?logo=qt&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey?logo=windows&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?logo=windowsterminal&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
@@ -19,7 +19,7 @@ Cursor HUD sits on top of your other windows and shows everything at a glance, s
 
 ## Who is this for
 
-- Individual Cursor **Pro / Pro+ / Ultra** users on Windows who want passive spend awareness
+- Individual Cursor **Pro / Pro+ / Ultra** users who want passive spend awareness
 - **Business / Enterprise** team members who want to track personal and team On-Demand costs
 - Anyone who has ever been surprised by an unexpected Cursor bill
 
@@ -37,7 +37,7 @@ Cursor HUD sits on top of your other windows and shows everything at a glance, s
 | cursor_costs | Web app | Requires manual token input |
 | cursor-usage-tracker | Server + Slack bot | Enterprise only, team-focused |
 
-**Cursor HUD** is the only standalone Windows desktop overlay — zero configuration, always visible, no IDE required.
+**Cursor HUD** is the only standalone cross-platform desktop overlay — zero configuration, always visible, no IDE required.
 
 ---
 
@@ -52,8 +52,8 @@ Cursor HUD sits on top of your other windows and shows everything at a glance, s
 - **Korean / English UI**
 - **60-second auto-refresh** with live countdown
 - **In-app debug log** panel for troubleshooting
-- **Start on Boot** — Windows startup registration
-- **Single-file EXE** — no installation required
+- **Start on Boot** — native startup registration (Windows registry, macOS LaunchAgent, Linux XDG autostart)
+- **Pre-built binaries** — no installation required
 
 ---
 
@@ -69,15 +69,19 @@ Cursor HUD sits on top of your other windows and shows everything at a glance, s
 
 ## Requirements
 
-**Python (run from source):**
+**Python (run from source) — all platforms:**
 ```
 Python 3.10+
 pip install pyqt5 requests
 ```
 
-**EXE (pre-built):**
-- Windows 10 / 11
-- [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) (usually already installed)
+**Pre-built binary:**
+
+| Platform | Requirement |
+|---|---|
+| Windows 10 / 11 | [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) (usually already installed) |
+| macOS 13+ (Apple Silicon) | Unzip, then `xattr -cr CursorHUD.app` to clear quarantine before first run |
+| Linux (glibc 2.35+, x11) | `chmod +x CursorHUD-Linux` before running; XCB libraries required |
 
 ---
 
@@ -85,19 +89,32 @@ pip install pyqt5 requests
 
 ### Run from source
 
-```powershell
+```bash
 git clone https://github.com/soki1229/cursor-hud.git
 cd cursor-hud
 pip install pyqt5 requests
 python cursor_hud.py
 ```
 
-### Build a standalone EXE
+### Build a standalone binary
 
+**Windows** — produces `dist/CursorHUD.exe`:
 ```powershell
 pip install pyinstaller
 python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
-# Output: dist/CursorHUD.exe
+```
+
+**macOS** — produces `dist/CursorHUD.app` (zipped for distribution):
+```bash
+pip install pyinstaller
+python -m PyInstaller --windowed --name CursorHUD cursor_hud.py
+zip -r CursorHUD-macOS.zip dist/CursorHUD.app
+```
+
+**Linux** — produces a single executable `dist/CursorHUD`:
+```bash
+pip install pyinstaller
+python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 ```
 
 ---
@@ -105,9 +122,13 @@ python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 ## How it works
 
 1. Cursor stores your session token in a local SQLite database:
-   ```
-   %APPDATA%\Cursor\User\globalStorage\state.vscdb
-   ```
+
+   | Platform | Path |
+   |---|---|
+   | Windows | `%APPDATA%\Cursor\User\globalStorage\state.vscdb` |
+   | macOS | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
+   | Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
+
 2. The app copies this file to a temp path (to avoid file locking), reads the token, and decodes the user ID from the JWT payload.
 3. It calls Cursor's internal API (`/api/usage-summary`, `/api/auth/me`) using the session cookie.
 4. Data is parsed and rendered. The temp copy is deleted immediately.
@@ -158,7 +179,7 @@ Free accounts return zero credit data from Cursor's API — this is a Cursor pla
 | Show Team Data | Toggle team On-Demand row |
 | Show On-Demand Costs | Toggle OD cost card |
 | Show Official Usage Rate | Toggle usage rate card |
-| Start on Boot | Register / unregister Windows startup |
+| Start on Boot | Register / unregister OS startup (Windows: registry · macOS: LaunchAgent · Linux: XDG autostart) |
 
 Settings are saved to `cursor_hud_settings.json` next to the executable.
 
@@ -188,7 +209,7 @@ cursor-hud/
         └── credits_enterprise.jpg
 ```
 
-Kept as a single file intentionally — EXE build stays trivial, distribution stays simple. Internal sections are clearly delimited:
+Kept as a single file intentionally — binary build stays trivial, distribution stays simple. Internal sections are clearly delimited:
 
 ```
 EXE-SAFE PATHS · LOGGING · THEME SYSTEM · CONSTANTS · I18N + SETTINGS
