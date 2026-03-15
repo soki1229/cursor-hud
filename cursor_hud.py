@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QMessageBox, QSizePolicy,
     QTextEdit, QDialog, QTabWidget, QSystemTrayIcon, QMenu, QAction,
-    QShortcut, QFileDialog,
+    QShortcut, QFileDialog, QLineEdit,
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QPointF, QSize, qInstallMessageHandler
 from PyQt5.QtGui import (
@@ -301,8 +301,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "startup_boot": "부팅 시 자동실행", "pin_top": "항상 위",
         "tray_show": "열기", "tray_refresh": "새로고침", "tray_quit": "종료",
         "csv_export": "CSV 내보내기", "csv_save_title": "사용 이벤트 CSV 저장",
-        "csv_err_no_team": "팀 ID를 찾을 수 없습니다. 로그인 후 새로고침 해주세요.",
+        "csv_err_no_team": "팀 ID를 찾을 수 없습니다. 설정에서 직접 입력해 주세요.",
         "csv_err_fetch": "CSV 다운로드 실패", "csv_saved": "저장 완료",
+        "csv_team_id_label": "팀 ID (CSV 내보내기)",
+        "csv_team_id_placeholder": "자동 감지",
     },
     "en": {
         "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
@@ -341,8 +343,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "startup_boot": "Start on Boot", "pin_top": "Always on Top",
         "tray_show": "Show", "tray_refresh": "Refresh", "tray_quit": "Quit",
         "csv_export": "Export CSV", "csv_save_title": "Save Usage Events CSV",
-        "csv_err_no_team": "Team ID not found. Please refresh after signing in.",
+        "csv_err_no_team": "Team ID not found. Enter it manually in Settings.",
         "csv_err_fetch": "CSV download failed", "csv_saved": "Saved",
+        "csv_team_id_label": "Team ID (CSV export)",
+        "csv_team_id_placeholder": "auto-detect",
     },
 }
 
@@ -351,6 +355,7 @@ DEFAULT_SETTINGS: dict = {
     "show_personal": True, "show_org": True, "show_official": True,
     "pin_on_top": True,
     "win_x": None, "win_y": None, "win_w": WIN_W, "mini_mode": False,
+    "csv_team_id": "",   # override for CSV export teamId (empty = auto-detect)
 }
 
 
@@ -582,15 +587,17 @@ def parse_data(raw: dict) -> dict:
     is_team = membership in ("team", "enterprise", "business")
     is_enterprise = membership == "enterprise"
 
-    # teamId for CSV export — try several paths (undocumented API, field name varies)
-    team_id = (
-        s.get("teamId") or
-        s.get("teamUsage", {}).get("teamId") or
-        pr.get("teamId") or
-        pr.get("organizationId") or
-        pr.get("id") or
-        ""
-    )
+    # teamId for CSV export — try several paths (undocumented API, field name varies).
+    # pr.get("id") is deliberately excluded: it is the userId, not the teamId.
+    _team_candidates = {
+        "summary.teamId":              s.get("teamId"),
+        "summary.teamUsage.teamId":    s.get("teamUsage", {}).get("teamId"),
+        "summary.organizationId":      s.get("organizationId"),
+        "profile.teamId":              pr.get("teamId"),
+        "profile.organizationId":      pr.get("organizationId"),
+    }
+    log.debug("teamId candidates: %s", _team_candidates)
+    team_id = next((str(v) for v in _team_candidates.values() if v), "")
 
     return {
         "cycle":        cycle,
@@ -1812,6 +1819,23 @@ class SettingsPage(QWidget):
         self._t["startup_boot"] = lbl
         cl.addWidget(Divider())
 
+        # Team ID override for CSV export
+        self._t["csv_team_id_label"] = ql(self.T("csv_team_id_label"), 9, c("t_body"))
+        cl.addWidget(self._t["csv_team_id_label"])
+        self._team_id_input = QLineEdit()
+        self._team_id_input.setFixedHeight(24)
+        self._team_id_input.setPlaceholderText(self.T("csv_team_id_placeholder"))
+        self._team_id_input.setText(self.settings.get("csv_team_id", ""))
+        self._team_id_input.setStyleSheet(
+            f"QLineEdit{{background:{c('bg_card').name()};color:{c('t_body').name()};"
+            f"border:1px solid rgba(128,128,128,0.30);border-radius:4px;"
+            f"padding:0 6px;font-size:9px;font-family:{_UI_FONT};}}"
+            f"QLineEdit:focus{{border:1px solid {c('accent').name()};}}"
+        )
+        self._team_id_input.editingFinished.connect(self._on_team_id_edited)
+        cl.addWidget(self._team_id_input)
+        cl.addWidget(Divider())
+
         self._t["auto_saved"] = ql(self.T("auto_saved"), 8, c("t_dim"))
         cl.addWidget(self._t["auto_saved"])
         self._vl.addWidget(card)
@@ -1859,6 +1883,12 @@ class SettingsPage(QWidget):
 
         return rw, lbl, sw
 
+    def _on_team_id_edited(self):
+        val = self._team_id_input.text().strip()
+        self.settings["csv_team_id"] = val
+        save_settings(self.settings)
+        log.info("csv_team_id set to: %s", val or "(auto-detect)")
+
     def _on_switch(self, key: str, value: bool):
         _metrics.inc(f"toggle_{key}")
         if key == "_startup":
@@ -1903,6 +1933,13 @@ class SettingsPage(QWidget):
             return _linux_autostart_path().exists()
 
     def refresh_theme(self):
+        if hasattr(self, "_team_id_input"):
+            self._team_id_input.setStyleSheet(
+                f"QLineEdit{{background:{c('bg_card').name()};color:{c('t_body').name()};"
+                f"border:1px solid rgba(128,128,128,0.30);border-radius:4px;"
+                f"padding:0 6px;font-size:9px;font-family:{_UI_FONT};}}"
+                f"QLineEdit:focus{{border:1px solid {c('accent').name()};}}"
+            )
         hdr = self._t.get("settings_title")
         if hdr:
             set_lbl_color(hdr, c("t_muted"))
@@ -2547,11 +2584,14 @@ class HUDWindow(QMainWindow):
             QMessageBox.warning(self, "CursorHUD",
                                 S(self.settings, "csv_err_fetch"))
             return
-        team_id = d.get("team_id", "")
+        # Settings override takes priority over auto-detected value
+        team_id = self.settings.get("csv_team_id", "").strip() or d.get("team_id", "")
         if not team_id:
             QMessageBox.warning(self, "CursorHUD",
                                 S(self.settings, "csv_err_no_team"))
             return
+        log.info("CSV export — teamId=%s (source=%s)", team_id,
+                 "settings" if self.settings.get("csv_team_id", "").strip() else "auto")
 
         cyc = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
