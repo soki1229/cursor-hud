@@ -249,6 +249,7 @@ else:
 WIN_W     = 400
 WIN_W_MAX = 500
 WIN_H     = 660
+SNAP_PX   = 30          # px threshold for edge-snap on drag release
 ARC_MIN_W = 240
 
 
