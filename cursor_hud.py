@@ -2978,6 +2978,7 @@ class HUDWindow(QMainWindow):
         self._target_h = target_h
         if self.height() != target_h:
             self.resize(self.width(), target_h)
+            self._clamp_to_screen(get_screen_for_pos(self.geometry().center()))
 
     def _apply_scale(self):
         if not hasattr(self, "_title_lbl"):
