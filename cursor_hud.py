@@ -305,6 +305,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "csv_err_fetch": "CSV 다운로드 실패", "csv_saved": "저장 완료",
         "csv_team_id_label": "팀 ID (CSV 내보내기)",
         "csv_team_id_placeholder": "선택 사항 — 비워두면 개인 데이터",
+        "experimental_section": "실험적 기능",
+        "experimental_toggle":  "실험적 기능 활성화",
+        "experimental_hint":    "불안정하거나 변경될 수 있는 기능입니다",
     },
     "en": {
         "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
@@ -347,6 +350,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "csv_err_fetch": "CSV download failed", "csv_saved": "Saved",
         "csv_team_id_label": "Team ID (CSV export)",
         "csv_team_id_placeholder": "optional — blank = personal data",
+        "experimental_section": "Experimental",
+        "experimental_toggle":  "Enable experimental features",
+        "experimental_hint":    "Features that may change or break",
     },
 }
 
@@ -355,7 +361,8 @@ DEFAULT_SETTINGS: dict = {
     "show_personal": True, "show_org": True, "show_official": True,
     "pin_on_top": True,
     "win_x": None, "win_y": None, "win_w": WIN_W, "mini_mode": False,
-    "csv_team_id": "",   # override for CSV export teamId (empty = auto-detect)
+    "csv_team_id": "",        # override for CSV export teamId (empty = auto-detect)
+    "show_experimental": False,  # gates all Experimental features
 }
 
 
