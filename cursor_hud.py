@@ -2402,6 +2402,41 @@ class HUDWindow(QMainWindow):
         self.resize(self._cur_win_w, self.height())
         QTimer.singleShot(80, self._adjust_height)
 
+    def _clamp_to_screen(self, screen: "QScreen") -> None:
+        """Slide window back on-screen if any part is clipped after a resize."""
+        avail    = screen.availableGeometry()
+        r        = self.frameGeometry()
+        a_right  = avail.left() + avail.width()
+        a_bottom = avail.top()  + avail.height()
+        x_lo = avail.left()
+        x_hi = max(avail.left(), a_right  - r.width())
+        y_lo = avail.top()
+        y_hi = max(avail.top(),  a_bottom - r.height())
+        nx   = max(x_lo, min(r.x(), x_hi))
+        ny   = max(y_lo, min(r.y(), y_hi))
+        if nx != r.x() or ny != r.y():
+            self.move(nx, ny)
+
+    def _snap_to_edge(self) -> None:
+        """Snap window to nearest screen edge when within SNAP_PX pixels."""
+        screen   = get_screen_for_pos(self.geometry().center())
+        avail    = screen.availableGeometry()
+        r        = self.frameGeometry()
+        a_right  = avail.left() + avail.width()
+        a_bottom = avail.top()  + avail.height()
+        r_right  = r.left() + r.width()
+        r_bottom = r.top()  + r.height()
+        # X axis
+        if   abs(r.left()  - avail.left()) <= SNAP_PX:  nx = avail.left()
+        elif abs(r_right   - a_right)      <= SNAP_PX:  nx = a_right - r.width()
+        else:                                            nx = r.left()
+        # Y axis
+        if   abs(r.top()   - avail.top())  <= SNAP_PX:  ny = avail.top()
+        elif abs(r_bottom  - a_bottom)     <= SNAP_PX:  ny = a_bottom - r.height()
+        else:                                            ny = r.top()
+        if nx != r.left() or ny != r.top():
+            self.move(nx, ny)
+
     def _build_ui(self):
         root = QWidget()
         root.setAttribute(Qt.WA_TranslucentBackground)
