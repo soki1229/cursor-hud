@@ -21,6 +21,12 @@
   - Toggle ON: CSV export button appears in Credits tab; Team ID input appears
     in Settings tab.
 - `show_experimental` setting added to `DEFAULT_SETTINGS` (default: `False`).
+- **Edge snap**: window snaps to screen edges (left/right/top/taskbar boundary)
+  when released within 30 px of an edge. Works on all platforms; respects
+  taskbar area via `availableGeometry()`. Multi-monitor aware.
+- **Screen clamp**: window is automatically repositioned to remain fully
+  visible whenever its height changes (tab switch, mini↔full mode toggle,
+  data load) or on startup with a saved position.
 
 ### Fixes
 - **CSV export without Team ID**: The "Export CSV" button no longer requires a
