@@ -2322,12 +2322,11 @@ class HUDWindow(QMainWindow):
         saved_x = self.settings.get("win_x")
         saved_y = self.settings.get("win_y")
         if saved_x is not None and saved_y is not None:
-            x = max(geo.left(), min(saved_x, geo.right() - 60))
-            y = max(geo.top(), min(saved_y, geo.bottom() - 60))
-            self.move(x, y)
+            self.move(saved_x, saved_y)
         else:
             self.move(geo.right() - self._cur_win_w - 20, geo.bottom() - WIN_H - 20)
         self.resize(self._cur_win_w, WIN_H)
+        self._clamp_to_screen(QApplication.primaryScreen())
         self._mini_mode = self.settings.get("mini_mode", False)
         self._build_ui()
         self._setup_shortcuts()
