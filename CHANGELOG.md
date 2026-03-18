@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0-beta.6 — Unreleased
+## v1.0.0-beta.6 — 2026-03-19
 
 ### Features
 - **Export CSV**: "Export CSV" button added at the bottom of the Credits page.
@@ -21,6 +21,13 @@
   - Toggle ON: CSV export button appears in Credits tab; Team ID input appears
     in Settings tab.
 - `show_experimental` setting added to `DEFAULT_SETTINGS` (default: `False`).
+- **App icon**: custom icon assets embedded into all platform builds.
+  - Place `assets/icon.ico` (Windows), `assets/icon.icns` (macOS), `assets/icon_256.png`
+    (Linux/fallback) before building.
+  - Dev mode (non-frozen): `app.setWindowIcon()` loads the raster PNG/ICO at startup if
+    the file is present; no-op when the asset is absent.
+  - Release builds: PyInstaller `--icon` flag embeds the icon into EXE / `.app` / Linux
+    binary so the taskbar/Dock icon is correct without any runtime file.
 - **Edge snap**: window snaps to screen edges (left/right/top/taskbar boundary)
   when released within 30 px of an edge. Works on all platforms; respects
   taskbar area via `availableGeometry()`. Multi-monitor aware.

@@ -22,7 +22,7 @@ jobs:
         run: pip install pyinstaller pyqt5 requests
 
       - name: Build EXE
-        run: python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
+        run: python -m PyInstaller --onefile --windowed --name CursorHUD --icon=assets/icon.ico cursor_hud.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -43,7 +43,7 @@ jobs:
 
       # --windowed (no --onefile) produces dist/CursorHUD.app bundle
       - name: Build .app
-        run: python -m PyInstaller --windowed --name CursorHUD cursor_hud.py
+        run: python -m PyInstaller --windowed --name CursorHUD --icon=assets/icon.icns cursor_hud.py
 
       # Remove unused Qt frameworks not needed by the app.
       # QtPrintSupport must be kept — it is a required dependency of the cocoa platform plugin.
@@ -83,7 +83,7 @@ jobs:
           pip install pyinstaller pyqt5 requests
 
       - name: Build binary
-        run: python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
+        run: python -m PyInstaller --onefile --windowed --name CursorHUD --icon=assets/icon_256.png cursor_hud.py
 
       - name: Rename binary
         run: mv dist/CursorHUD dist/CursorHUD-Linux

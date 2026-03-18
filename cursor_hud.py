@@ -3209,6 +3209,14 @@ def main():
     app.setApplicationName("CursorHUD")
     app.setQuitOnLastWindowClosed(True)  # close window = quit app (tray is supplementary)
 
+    if not getattr(sys, "frozen", False):
+        if sys.platform == "win32":
+            _icon_p = _app_dir() / "assets" / "icon.ico"
+        else:
+            _icon_p = _app_dir() / "assets" / "icon_256.png"
+        if _icon_p.exists():
+            app.setWindowIcon(QIcon(str(_icon_p)))
+
     init_settings = load_settings()
     apply_theme(init_settings.get("theme", "light"))
     app.setStyleSheet(
