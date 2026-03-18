@@ -1426,7 +1426,16 @@ class CreditsPage(QWidget):
         )
         self._csv_btn.clicked.connect(self.export_csv_clicked)
         exl.addWidget(self._csv_btn)
-        vl.addWidget(export_row)
+        self._csv_container = QWidget()
+        self._csv_container.setAttribute(Qt.WA_TranslucentBackground)
+        _ccl = QVBoxLayout(self._csv_container)
+        _ccl.setContentsMargins(0, 0, 0, 0)
+        _ccl.setSpacing(0)
+        _ccl.addWidget(export_row)
+        self._csv_container.setVisible(
+            self.settings.get("show_experimental", False)
+        )
+        vl.addWidget(self._csv_container)
 
     def _rebuild_labels(self):
         update_kv_label(self._row_refs["row_incl"],  self.T("row_incl"))
@@ -1442,6 +1451,10 @@ class CreditsPage(QWidget):
         set_lbl_color(self._hdr_rates,    c("accent2"))
         self._retry_btn.setText(self.T("err_retry"))
         self._csv_btn.setText(self.T("csv_export"))
+
+    def set_experimental_visible(self, visible: bool) -> None:
+        """Show/hide CSV export controls (gated by Experimental toggle)."""
+        self._csv_container.setVisible(visible)
 
     @staticmethod
     def _bonus_tag_qss() -> str:
