@@ -3026,6 +3026,8 @@ class HUDWindow(QMainWindow):
                 self.move(e.globalPos() - self._drag_pos)
                 return True
             if t == e.MouseButtonRelease:
+                if self._drag_pos:          # snap only after a real drag, not a bare click
+                    self._snap_to_edge()
                 self._drag_pos = None
                 return True
         return super().eventFilter(obj, e)
