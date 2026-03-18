@@ -66,24 +66,44 @@ The section header uses the same muted-color `ql()` label style as other section
 labels. The hint line uses `c("t_dim")`. The toggle uses the existing
 `_switch_row()` helper with key `"show_experimental"`.
 
-The Team ID `QLineEdit` and its label are wrapped in a container widget whose
-`setVisible()` is toggled — this avoids having to show/hide multiple sibling
-widgets individually.
+The Team ID `QLineEdit`, its label, and any surrounding `Divider` widgets are
+wrapped in a container widget (`_experimental_detail`) whose `setVisible()` is
+toggled. The `csv_team_id_label` QLabel must still be registered as
+`self._t["csv_team_id_label"]` so `_update_texts` continues to update it on
+language/theme changes — the move into the container must not break this
+registration.
 
 ---
 
 ## Credits Tab Changes
 
-The CSV export button (`_csv_btn`) and its preceding `Divider` are wrapped in a
-single container widget. `CreditsPage` exposes:
+The CSV export button (`_csv_btn`) and its `export_row` container are wrapped in
+a single `QWidget` container (`_csv_container`) inside `CreditsPage.__init__`.
+No divider precedes the button in the current layout, so none is added to the
+container. `CreditsPage` exposes:
 
 ```python
 def set_experimental_visible(self, visible: bool) -> None:
     self._csv_container.setVisible(visible)
 ```
 
-`HUDWindow._on_data()` and `SettingsPage` both call this method when the
-`show_experimental` value changes.
+`CreditsPage.__init__` applies the initial visibility directly from the
+`settings` dict passed in at construction:
+
+```python
+self._csv_container.setVisible(settings.get("show_experimental", False))
+```
+
+This mirrors the `SettingsPage.__init__` pattern and avoids relying on
+`_on_settings_changed` being called at startup (it is only triggered by user
+interaction). `HUDWindow._on_settings_changed` calls `set_experimental_visible`
+for all subsequent runtime changes.
+
+`self._csv_btn` retains its current attribute name and remains a direct
+attribute of `CreditsPage` after being re-parented into `_csv_container`.
+`HUDWindow` accesses `self._pg_credits._csv_btn` directly in four places
+(`_on_export_csv`, `_on_csv_ready`, `_on_csv_error`) — those references must
+continue to work unchanged.
 
 ---
 
@@ -91,25 +111,38 @@ def set_experimental_visible(self, visible: bool) -> None:
 
 ### `_on_switch("show_experimental", value)` in `SettingsPage`
 
-Handled by the existing `_on_switch` dispatch:
+The existing `_on_switch` already emits `self.changed.emit()` (via HUDWindow's
+`setting_changed` signal) after saving the setting. No new signal is needed.
+
+`HUDWindow._on_settings_changed` is extended to handle this key — exactly as it
+already handles `show_personal` / `show_org` / `show_official`:
 
 ```python
-# new branch in _on_switch
-elif key == "show_experimental":
-    self._experimental_detail.setVisible(value)
-    # notify HUDWindow to update Credits tab
-    self.experimental_changed.emit(value)  # new pyqtSignal
+# in HUDWindow._on_settings_changed
+self._pg_credits.set_experimental_visible(
+    self.settings.get("show_experimental", False)
+)
 ```
 
-`HUDWindow` connects `SettingsPage.experimental_changed` →
-`_pg_credits.set_experimental_visible`.
+`SettingsPage` also syncs its own `_experimental_detail` container visibility
+directly inside `_on_switch` when `key == "show_experimental"`:
 
-### Startup / `refresh_theme()`
+```python
+elif key == "show_experimental":
+    self._experimental_detail.setVisible(value)
+```
 
-Both `SettingsPage.__init__` and `refresh_theme()` read
-`settings.get("show_experimental", False)` and apply `setVisible()` to the
-relevant widgets — same pattern as the existing Team ID QLineEdit visibility
-guard.
+### Startup visibility
+
+`SettingsPage.__init__` sets the initial state of `_experimental_detail` by
+reading `settings.get("show_experimental", False)` immediately after the widget
+is constructed — same pattern as the existing Team ID `QLineEdit` guard.
+
+`CreditsPage.__init__` applies the initial `_csv_container` visibility the same
+way (as specified in "Credits Tab Changes" above). `HUDWindow._on_settings_changed`
+is **not** called automatically at startup — it is triggered only by user
+interaction. All runtime changes (user toggles the setting) flow through
+`_on_settings_changed`.
 
 ---
 
@@ -119,14 +152,11 @@ guard.
 |--------|--------|
 | `DEFAULT_SETTINGS` | add `"show_experimental": False` |
 | `STRINGS` | add 3 new keys (ko + en) |
-| `SettingsPage.__init__` | add Experimental section, wrap Team ID in container |
-| `SettingsPage._on_switch` | handle `show_experimental` key |
-| `SettingsPage.refresh_theme` | apply visibility from settings |
-| `SettingsPage` | add `experimental_changed = pyqtSignal(bool)` |
-| `CreditsPage._rebuild_labels` | wrap `_csv_btn` + divider in `_csv_container` |
+| `SettingsPage.__init__` | add Experimental section; wrap Team ID widgets in `_experimental_detail` container; apply initial visibility |
+| `SettingsPage._on_switch` | handle `"show_experimental"` key → set `_experimental_detail.setVisible(value)` |
+| `CreditsPage.__init__` | wrap `export_row` + `_csv_btn` in `_csv_container` widget |
 | `CreditsPage` | add `set_experimental_visible(bool)` method |
-| `HUDWindow.__init__` | connect `experimental_changed` signal |
-| `HUDWindow._on_data` | call `set_experimental_visible` on data load |
+| `HUDWindow._on_settings_changed` | call `_pg_credits.set_experimental_visible(settings.get("show_experimental", False))` |
 
 ---
 
