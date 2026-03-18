@@ -2529,6 +2529,9 @@ class HUDWindow(QMainWindow):
         self._pg_credits._personal_card.setVisible(cfg.get("show_personal", True))
         self._pg_credits._org_card.setVisible(cfg.get("show_org", True))
         self._pg_credits._rate_card.setVisible(cfg.get("show_official", True))
+        self._pg_credits.set_experimental_visible(
+            cfg.get("show_experimental", False)
+        )
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
             self._pg_profile.update_data(self._last_data)
