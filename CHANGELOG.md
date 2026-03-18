@@ -15,6 +15,12 @@
 - `_date_to_ms()` helper converts `YYYY-MM-DD` billing cycle strings to UTC ms timestamps.
 - `parse_data()` now extracts `team_id` (tries `teamId`, `organizationId`, `id` across
   summary and profile responses) and `is_enterprise` flag.
+- **Experimental section**: Settings tab now has an "Experimental" section at
+  the bottom (disabled by default). Enable it to reveal CSV export controls.
+  - Toggle OFF (default): CSV export button and Team ID field are hidden.
+  - Toggle ON: CSV export button appears in Credits tab; Team ID input appears
+    in Settings tab.
+- `show_experimental` setting added to `DEFAULT_SETTINGS` (default: `False`).
 
 ### Fixes
 - **CSV export without Team ID**: The "Export CSV" button no longer requires a

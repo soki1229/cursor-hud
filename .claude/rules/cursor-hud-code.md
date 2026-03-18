@@ -24,7 +24,7 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 | `PRIMITIVE WIDGETS`  | `ArcGauge`, `SegBar`, `MiniBar`, `Card`, `Divider`, `ToggleSwitch`       |
 | `KV-ROW FACTORY`     | `kv_row()`, `set_kv()`, `section_hdr()`, `KVRow`                        |
 | `DEBUG DIALOG`       | `DebugDialog` — Logs / JSON / Metrics tabs                               |
-| `PAGE: CREDITS`      | `CreditsPage` — hero card, arc gauge, seg bars, OD display                |
+| `PAGE: CREDITS`      | `CreditsPage` — hero card, arc gauge, seg bars, OD display, `set_experimental_visible()` |
 | `PAGE: PROFILE`      | `ProfilePage` — account info                                             |
 | `PAGE: SETTINGS`     | `SettingsPage` — lang, theme, toggles, startup reg                        |
 | `STATUS BAR`         | `StatusBar` — countdown, log button                                       |
@@ -41,4 +41,4 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 ## Settings keys
 
 `lang`, `theme`, `show_personal`, `show_org`, `show_official`, `pin_on_top`,
-`win_x`, `win_y`, `win_w`, `mini_mode`.
+`win_x`, `win_y`, `win_w`, `mini_mode`, `csv_team_id`, `show_experimental`.
