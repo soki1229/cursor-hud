@@ -1840,9 +1840,32 @@ class SettingsPage(QWidget):
         self._t["startup_boot"] = lbl
         cl.addWidget(Divider())
 
-        # Team ID override for CSV export
+        # ── Experimental section ──────────────────────────────────
+        self._t["experimental_section"] = ql(
+            f"⚗  {self.T('experimental_section')}", 9, c("t_muted"))
+        cl.addWidget(self._t["experimental_section"])
+        self._t["experimental_hint"] = ql(self.T("experimental_hint"), 8, c("t_dim"))
+        cl.addWidget(self._t["experimental_hint"])
+        cl.addWidget(Divider())
+
+        row_exp, lbl_exp, sw_exp = self._switch_row(
+            self.T("experimental_toggle"), "show_experimental",
+            self.settings.get("show_experimental", False),
+        )
+        cl.addWidget(row_exp)
+        self._t["experimental_toggle"] = lbl_exp
+        self._sw_refs["show_experimental"] = (row_exp, lbl_exp, sw_exp)
+
+        # Detail widgets shown only when Experimental is ON
+        self._experimental_detail = QWidget()
+        self._experimental_detail.setAttribute(Qt.WA_TranslucentBackground)
+        _edl = QVBoxLayout(self._experimental_detail)
+        _edl.setContentsMargins(0, 0, 0, 0)
+        _edl.setSpacing(4)
+
         self._t["csv_team_id_label"] = ql(self.T("csv_team_id_label"), 9, c("t_body"))
-        cl.addWidget(self._t["csv_team_id_label"])
+        _edl.addWidget(self._t["csv_team_id_label"])
+
         self._team_id_input = QLineEdit()
         self._team_id_input.setFixedHeight(24)
         self._team_id_input.setPlaceholderText(self.T("csv_team_id_placeholder"))
@@ -1854,7 +1877,12 @@ class SettingsPage(QWidget):
             f"QLineEdit:focus{{border:1px solid {c('accent').name()};}}"
         )
         self._team_id_input.editingFinished.connect(self._on_team_id_edited)
-        cl.addWidget(self._team_id_input)
+        _edl.addWidget(self._team_id_input)
+
+        cl.addWidget(self._experimental_detail)
+        self._experimental_detail.setVisible(
+            self.settings.get("show_experimental", False)
+        )
         cl.addWidget(Divider())
 
         self._t["auto_saved"] = ql(self.T("auto_saved"), 8, c("t_dim"))
@@ -1926,6 +1954,8 @@ class SettingsPage(QWidget):
             self.changed.emit()
             if key == "pin_on_top":
                 self.pin_changed.emit(value)
+            elif key == "show_experimental":
+                self._experimental_detail.setVisible(value)
 
     def _sync_pin(self, value: bool):
         self.settings["pin_on_top"] = value
@@ -1961,6 +1991,16 @@ class SettingsPage(QWidget):
                 f"padding:0 6px;font-size:9px;font-family:{_UI_FONT};}}"
                 f"QLineEdit:focus{{border:1px solid {c('accent').name()};}}"
             )
+        if hasattr(self, "_experimental_detail"):
+            self._experimental_detail.setVisible(
+                self.settings.get("show_experimental", False)
+            )
+        lbl = self._t.get("experimental_section")
+        if lbl:
+            set_lbl_color(lbl, c("t_muted"))
+        lbl = self._t.get("experimental_hint")
+        if lbl:
+            set_lbl_color(lbl, c("t_dim"))
         hdr = self._t.get("settings_title")
         if hdr:
             set_lbl_color(hdr, c("t_muted"))
