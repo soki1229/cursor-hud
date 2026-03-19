@@ -249,7 +249,10 @@ else:
 WIN_W     = 400
 WIN_W_MAX = 500
 WIN_H     = 660
-SNAP_PX   = 30          # px threshold for edge-snap on drag release
+SNAP_PX      = 30       # px threshold for edge-snap on drag release
+MINI_LABEL_W = 38       # mini-mode: fixed label column width (px)
+MINI_AMOUNT_W = 56      # mini-mode: fixed amount column width (px)
+MINI_STACK_N  = 10      # mini-mode: max stack bars per row
 ARC_MIN_W = 240
 
 
@@ -2539,7 +2542,7 @@ class HUDWindow(QMainWindow):
         self._mini_layout.setContentsMargins(12, 6, 12, 6)
         self._mini_layout.setSpacing(3)
         # Rows are created dynamically in _update_mini
-        self._mini_rows: list[tuple] = []  # (container, header_lbl, bar, amount_lbl)
+        self._mini_groups: list[tuple] = []  # (label_lbl, amount_lbl) per credit type group
         self._mini_w.hide()
         vl.addWidget(self._mini_w)
         vl.addWidget(self._status)
@@ -2793,105 +2796,136 @@ class HUDWindow(QMainWindow):
                 f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}")
 
     def _update_mini(self, d: dict):
-        """Rebuild mini-mode bar rows dynamically.
-        Each credit type gets one or more rows (one bar = base plan limit).
-        Overflow beyond the base limit spawns additional bars.
-        """
-        cr = d["credit"]
-        od = d["on_demand"]
-        base_limit = max(1, cr["budget_total"])  # base plan limit in cents (e.g. 2000 = $20)
+        """Rebuild mini-mode bar rows.
 
-        # Build row specs: (label_key, amount_cents, color)
+        Per credit type (Plan / Bonus / On-Demand):
+          Stack rows  — one per MINI_STACK_N full units consumed; label on first row.
+          Bottom row  — always present; full-width MiniBar + amount label.
+
+        All rows use a 3-column HBox:
+          col-0  label (38 px)  |  col-1  gauge area (expanding)  |  col-2  amount (56 px)
+        This keeps gauge left/right edges aligned across every row of a group.
+        """
+        # ── clear previous widgets ─────────────────────────────────────────
+        while self._mini_layout.count():
+            item = self._mini_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._mini_groups = []  # reset for _apply_scale
+
+        cr         = d["credit"]
+        od         = d["on_demand"]
+        base_limit = max(1, cr["budget_total"])
+
         rows_spec: list[tuple[str, int, QColor]] = [
-            ("row_incl", cr["incl_used"], c("accent")),
+            ("row_incl", cr["incl_used"],  c("accent")),
         ]
         if cr["bonus_used"] > 0:
             rows_spec.append(("row_bonus", cr["bonus_used"], c("c_amber")))
         if od["personal"] > 0:
-            rows_spec.append(("row_extra", od["personal"], c("c_red")))
+            rows_spec.append(("row_extra", od["personal"],   c("c_red")))
 
-        # Expand into visual rows.
-        # Each row_spec becomes a "group": header label on first bar, amount on last bar.
-        # expanded item: (header_text | "", amount_text | "", frac, color)
-        expanded: list[tuple[str, str, float, QColor]] = []
         for label_key, amount, color in rows_spec:
-            header = S(self.settings, label_key)
-            if amount <= 0:
-                expanded.append((header, usd(amount), 0.0, color))
-            elif amount <= base_limit:
-                expanded.append((header, usd(amount), amount / base_limit, color))
+            label_text   = S(self.settings, label_key)
+            full_units   = amount // base_limit
+            partial_frac = (amount % base_limit) / base_limit if base_limit > 0 else 0.0
+            n_stack_rows = (full_units + MINI_STACK_N - 1) // MINI_STACK_N if full_units > 0 else 0
+
+            group = QWidget()
+            group.setAttribute(Qt.WA_TranslucentBackground)
+            gvbox = QVBoxLayout(group)
+            gvbox.setContentsMargins(0, 0, 0, 0)
+            gvbox.setSpacing(2)
+
+            label_lbl  = None  # set on the first row of this group
+            amount_lbl = None  # set on the bottom row
+
+            # ── stack rows ────────────────────────────────────────────────
+            for sr in range(n_stack_rows):
+                row_w = QWidget()
+                row_w.setAttribute(Qt.WA_TranslucentBackground)
+                hl = QHBoxLayout(row_w)
+                hl.setContentsMargins(0, 0, 0, 0)
+                hl.setSpacing(0)
+
+                # col 0: label (first stack row) or invisible spacer
+                if sr == 0:
+                    lbl = QLabel(label_text)
+                    lbl.setFont(QFont(_UI_FONT, 8))
+                    set_lbl_color(lbl, color)
+                    lbl.setStyleSheet("background:transparent;")
+                    lbl.setFixedWidth(MINI_LABEL_W)
+                    lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                    label_lbl = lbl
+                else:
+                    lbl = QWidget()
+                    lbl.setFixedWidth(MINI_LABEL_W)
+                    lbl.setAttribute(Qt.WA_TranslucentBackground)
+                hl.addWidget(lbl, 0)
+
+                # col 1: 10 stack bars (equal stretch, 3 px gap)
+                bars_w = QWidget()
+                bars_w.setAttribute(Qt.WA_TranslucentBackground)
+                bl = QHBoxLayout(bars_w)
+                bl.setContentsMargins(0, 0, 0, 0)
+                bl.setSpacing(3)
+                filled = min(MINI_STACK_N, full_units - sr * MINI_STACK_N)
+                for bi in range(MINI_STACK_N):
+                    b = MiniBar(h=6)
+                    b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                    b.set_value(1.0 if bi < filled else 0.0, color)
+                    bl.addWidget(b, 1)
+                hl.addWidget(bars_w, 1)
+
+                # col 2: spacer aligning with amount_lbl in bottom row
+                spc = QWidget()
+                spc.setFixedWidth(MINI_AMOUNT_W)
+                spc.setAttribute(Qt.WA_TranslucentBackground)
+                hl.addWidget(spc, 0)
+
+                gvbox.addWidget(row_w)
+
+            # ── bottom row (always) ───────────────────────────────────────
+            bot_w = QWidget()
+            bot_w.setAttribute(Qt.WA_TranslucentBackground)
+            hl = QHBoxLayout(bot_w)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(0)  # must match stack rows so gauge left-edge aligns
+
+            # col 0: label (only when no stack rows) or invisible spacer
+            if n_stack_rows == 0:
+                lbl = QLabel(label_text)
+                lbl.setFont(QFont(_UI_FONT, 8))
+                set_lbl_color(lbl, color)
+                lbl.setStyleSheet("background:transparent;")
+                lbl.setFixedWidth(MINI_LABEL_W)
+                lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                label_lbl = lbl
             else:
-                remaining = amount
-                bar_count = (amount + base_limit - 1) // base_limit
-                bar_idx = 0
-                while remaining > 0:
-                    chunk = min(remaining, base_limit)
-                    frac = chunk / base_limit
-                    is_first = (bar_idx == 0)
-                    is_last  = (bar_idx == bar_count - 1)
-                    h_text = header if is_first else ""
-                    a_text = usd(amount) if is_last else ""
-                    expanded.append((h_text, a_text, frac, color))
-                    remaining -= chunk
-                    bar_idx += 1
+                lbl = QWidget()
+                lbl.setFixedWidth(MINI_LABEL_W)
+                lbl.setAttribute(Qt.WA_TranslucentBackground)
+            hl.addWidget(lbl, 0)
 
-        # Sync widget rows — each row: [optional header] + [bar | amount_label]
-        # Row widget structure (VBox):
-        #   header_lbl  (hidden when empty, 0-height)
-        #   HBox: [MiniBar] [amount_lbl]
-        layout = self._mini_layout
-
-        # _mini_rows: list of (container, header_lbl, bar, amount_lbl)
-        while len(self._mini_rows) > len(expanded):
-            item = self._mini_rows.pop()
-            layout.removeWidget(item[0])
-            item[0].deleteLater()
-        while len(self._mini_rows) < len(expanded):
-            container = QWidget()
-            container.setAttribute(Qt.WA_TranslucentBackground)
-            vbox = QVBoxLayout(container)
-            vbox.setContentsMargins(0, 0, 0, 0)
-            vbox.setSpacing(1)
-            # Header label (section title — hidden when empty)
-            header_lbl = QLabel("")
-            header_lbl.setFont(QFont(_UI_FONT, 8))
-            header_lbl.setStyleSheet("background:transparent;")
-            header_lbl.setMaximumHeight(0)
-            vbox.addWidget(header_lbl)
-            # Bar row
-            bar_row = QWidget()
-            bar_row.setAttribute(Qt.WA_TranslucentBackground)
-            rl = QHBoxLayout(bar_row)
-            rl.setContentsMargins(0, 0, 0, 0)
-            rl.setSpacing(6)
+            # col 1: full-width MiniBar
             bar = MiniBar(h=6)
             bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            amount_lbl = QLabel("")
-            amount_lbl.setFont(QFont(_UI_FONT, 9, QFont.Bold))
-            amount_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            amount_lbl.setFixedWidth(56)
-            amount_lbl.setStyleSheet("background:transparent;")
-            rl.addWidget(bar, 1)
-            rl.addWidget(amount_lbl, 0)
-            vbox.addWidget(bar_row)
-            layout.addWidget(container)
-            self._mini_rows.append((container, header_lbl, bar, amount_lbl))
+            bar.set_value(partial_frac, color)
+            hl.addWidget(bar, 1)
 
-        # Update values
-        for i, (h_text, a_text, frac, color) in enumerate(expanded):
-            container, header_lbl, bar, amount_lbl = self._mini_rows[i]
-            bar.set_value(frac, color)
-            # Header: show/hide via maxHeight (avoids layout gaps)
-            if h_text:
-                header_lbl.setText(h_text)
-                set_lbl_color(header_lbl, color)
-                header_lbl.setMaximumHeight(14)
-            else:
-                header_lbl.setText("")
-                header_lbl.setMaximumHeight(0)
-            # Amount: show on last bar of group only
-            amount_lbl.setText(a_text)
-            set_lbl_color(amount_lbl, color)
+            # col 2: amount label
+            al = QLabel(usd(amount))
+            al.setFont(QFont(_UI_FONT, 9, QFont.Bold))
+            al.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            al.setFixedWidth(MINI_AMOUNT_W)
+            al.setStyleSheet("background:transparent; padding-left:4px;")
+            set_lbl_color(al, color)
+            amount_lbl = al
+            hl.addWidget(al, 0)
+
+            gvbox.addWidget(bot_w)
+            self._mini_layout.addWidget(group)
+            self._mini_groups.append((label_lbl, amount_lbl))
 
     def _on_error(self, err: str):
         _metrics.inc("fetch_error")
@@ -2992,16 +3026,18 @@ class HUDWindow(QMainWindow):
         if hasattr(self, "_pg_credits"):
             arc_size = max(90, min(180, int(150 * scale)))
             self._pg_credits.apply_scale(scale, arc_size=arc_size)
-        if hasattr(self, "_mini_rows"):
+        if hasattr(self, "_mini_groups"):
             mini_px = max(8, int(9 * scale))
             hdr_px  = max(7, int(8 * scale))
-            for _, header_lbl, bar, amount_lbl in self._mini_rows:
-                f = amount_lbl.font()
-                f.setPointSize(mini_px)
-                amount_lbl.setFont(f)
-                f2 = header_lbl.font()
-                f2.setPointSize(hdr_px)
-                header_lbl.setFont(f2)
+            for label_lbl, amount_lbl in self._mini_groups:
+                if amount_lbl is not None:
+                    f = amount_lbl.font()
+                    f.setPointSize(mini_px)
+                    amount_lbl.setFont(f)
+                if label_lbl is not None:
+                    f2 = label_lbl.font()
+                    f2.setPointSize(hdr_px)
+                    label_lbl.setFont(f2)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
