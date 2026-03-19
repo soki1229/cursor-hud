@@ -2818,7 +2818,7 @@ class HUDWindow(QMainWindow):
         base_limit = max(1, cr["budget_total"])
 
         rows_spec: list[tuple[str, int, QColor]] = [
-            ("row_incl", cr["incl_used"],  c("accent")),
+            ("row_incl", cr["incl_used"],  c("accent")),  # always shown; Bonus/OD only when > 0
         ]
         if cr["bonus_used"] > 0:
             rows_spec.append(("row_bonus", cr["bonus_used"], c("c_amber")))
@@ -2828,7 +2828,7 @@ class HUDWindow(QMainWindow):
         for label_key, amount, color in rows_spec:
             label_text   = S(self.settings, label_key)
             full_units   = amount // base_limit
-            partial_frac = (amount % base_limit) / base_limit if base_limit > 0 else 0.0
+            partial_frac = (amount % base_limit) / base_limit  # base_limit >= 1 (max(1, ...) above)
             n_stack_rows = (full_units + MINI_STACK_N - 1) // MINI_STACK_N if full_units > 0 else 0
 
             group = QWidget()
