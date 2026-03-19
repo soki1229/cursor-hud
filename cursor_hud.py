@@ -2835,11 +2835,11 @@ class HUDWindow(QMainWindow):
             hl.setSpacing(4)
 
             # label + optional ×N overflow badge
-            badge    = f" ×{full_units}" if full_units > 0 else ""
-            lbl      = QLabel(label_text + badge)
+            badge = f" ×{full_units}" if full_units > 0 else ""
+            lbl   = QLabel(label_text + badge)
             lbl.setFont(QFont(_UI_FONT, 8))
-            set_lbl_color(lbl, color)
-            lbl.setStyleSheet("background:transparent;")
+            set_lbl_color(lbl, color)   # sets color + background:transparent
+            lbl.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             hl.addWidget(lbl, 0)
 
             bar = MiniBar(h=6)
