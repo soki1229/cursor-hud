@@ -2862,10 +2862,10 @@ class HUDWindow(QMainWindow):
                 bl.setContentsMargins(0, 0, 0, 0)
                 bl.setSpacing(3)
                 filled = min(MINI_STACK_N, full_units - sr * MINI_STACK_N)
-                for bi in range(MINI_STACK_N):
+                for _ in range(filled):
                     b = MiniBar(h=6)
                     b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                    b.set_value(1.0 if bi < filled else 0.0, color)
+                    b.set_value(1.0, color)
                     bl.addWidget(b, 1)
                 hl.addWidget(bars_w, 1)
 
