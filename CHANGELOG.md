@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.0-beta.7 — 2026-03-20
+
+### Features
+- **Mini-mode redesigned**: credit rows now use a 2-line layout per credit type.
+  - Line 1: type name (Plan / Bonus / On-Demand) with right-aligned chips showing
+    full units consumed beyond the base limit; dollar amount displayed at the far right.
+  - Line 2: full-width MiniBar progress bar showing progress within the current unit.
+  - Chips are fixed-size (8 × 6 px) and built right-to-left; up to 10 chips per row.
+  - All MiniBar right edges share the same axis as the amount label right edge.
+
+### Fixes
+- Mini-mode label text was invisible due to `setStyleSheet` overriding the color set
+  by `set_lbl_color()`; redundant stylesheet call removed.
+
+---
+
 ## v1.0.0-beta.6 — 2026-03-19
 
 ### Features

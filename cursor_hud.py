@@ -233,7 +233,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.6"
+VERSION   = "1.0.0-beta.7"
 BASE_URL  = "https://cursor.com"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
@@ -251,6 +251,11 @@ WIN_W_MAX = 500
 WIN_H     = 660
 SNAP_PX       = 30      # px threshold for edge-snap on drag release
 MINI_AMOUNT_W = 56      # mini-mode: fixed amount column width (px)
+CHIP_W        = 8       # mini-mode: chip width (px)
+CHIP_H        = 6       # mini-mode: chip height (px)
+CHIP_GAP      = 3       # mini-mode: gap between chips (px)
+CHIPS_MAX     = 10      # mini-mode: max chips per row
+CHIPS_AREA_W  = CHIPS_MAX * CHIP_W + (CHIPS_MAX - 1) * CHIP_GAP  # fixed chips area width
 ARC_MIN_W = 240
 
 
@@ -2794,15 +2799,17 @@ class HUDWindow(QMainWindow):
                 f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}")
 
     def _update_mini(self, d: dict):
-        """Rebuild mini-mode bar rows — one row per credit type.
+        """Rebuild mini-mode credit groups — 2 rows per credit type.
 
-        Layout per row:  [label ×N]  [MiniBar ──────────────]  [$XX.XX]
-          label: type name + overflow badge (×N) when usage exceeds base_limit.
-          bar:   progress within the current base_limit unit (0–100 %).
-          amount: total spent for this type.
+        Row 1 (header+chips):  [type name (stretch)] [chips right-aligned (CHIPS_AREA_W)] [$amount (MINI_AMOUNT_W)]
+        Row 2 (bar):           [MiniBar full width]
 
-        ×N formula: (amount-1)//base_limit so that amount==base_limit shows
-        the bar at 100 % with no badge (still within the first unit).
+        MiniBar extends to the window right edge, same as the amount label.
+        Chips are right-aligned inside CHIPS_AREA_W (addStretch before them).
+
+        Chips are right-aligned inside CHIPS_AREA_W (addStretch before them).
+        full_units formula: (amount-1)//base_limit so amount==base_limit shows
+        bar at 100% with no chips (still within the first unit).
         """
         # ── clear previous widgets ─────────────────────────────────────────
         while self._mini_layout.count():
@@ -2816,7 +2823,7 @@ class HUDWindow(QMainWindow):
         base_limit = max(1, cr["budget_total"])
 
         rows_spec: list[tuple[str, int, QColor]] = [
-            ("row_incl", cr["incl_used"],  c("accent")),  # always shown; Bonus/OD only when > 0
+            ("row_incl", cr["incl_used"],  c("accent")),
         ]
         if cr["bonus_used"] > 0:
             rows_spec.append(("row_bonus", cr["bonus_used"], c("c_amber")))
@@ -2824,28 +2831,43 @@ class HUDWindow(QMainWindow):
             rows_spec.append(("row_extra", od["personal"],   c("c_red")))
 
         for label_key, amount, color in rows_spec:
-            label_text = S(self.settings, label_key)
+            label_text   = S(self.settings, label_key)
             full_units   = (amount - 1) // base_limit if amount > 0 else 0
             partial_frac = (amount - full_units * base_limit) / base_limit
+            filled       = min(full_units, CHIPS_MAX)
 
-            row_w = QWidget()
-            row_w.setAttribute(Qt.WA_TranslucentBackground)
-            hl = QHBoxLayout(row_w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setSpacing(4)
+            group = QWidget()
+            group.setAttribute(Qt.WA_TranslucentBackground)
+            gvbox = QVBoxLayout(group)
+            gvbox.setContentsMargins(0, 0, 0, 2)
+            gvbox.setSpacing(1)
 
-            # label + optional ×N overflow badge
-            badge = f" ×{full_units}" if full_units > 0 else ""
-            lbl   = QLabel(label_text + badge)
+            # ── row 1: [label (stretch)] [chips right-aligned] [spacer] ──
+            hdr_row = QWidget()
+            hdr_row.setAttribute(Qt.WA_TranslucentBackground)
+            hl1 = QHBoxLayout(hdr_row)
+            hl1.setContentsMargins(0, 0, 0, 0)
+            hl1.setSpacing(4)
+
+            lbl = QLabel(label_text)
             lbl.setFont(QFont(_UI_FONT, 8))
-            set_lbl_color(lbl, color)   # sets color + background:transparent
-            lbl.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-            hl.addWidget(lbl, 0)
+            set_lbl_color(lbl, color)
+            hl1.addWidget(lbl, 1)
 
-            bar = MiniBar(h=6)
-            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            bar.set_value(partial_frac, color)
-            hl.addWidget(bar, 1)
+            chips_w = QWidget()
+            chips_w.setAttribute(Qt.WA_TranslucentBackground)
+            chips_w.setFixedWidth(CHIPS_AREA_W)
+            cl = QHBoxLayout(chips_w)
+            cl.setContentsMargins(0, 0, 0, 0)
+            cl.setSpacing(CHIP_GAP)
+            cl.addStretch(1)  # push chips to the right
+            for _ in range(filled):
+                chip = MiniBar(h=CHIP_H)
+                chip.setFixedWidth(CHIP_W)
+                chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+                chip.set_value(1.0, color)
+                cl.addWidget(chip)
+            hl1.addWidget(chips_w, 0)
 
             al = QLabel(usd(amount))
             al.setFont(QFont(_UI_FONT, 9, QFont.Bold))
@@ -2853,9 +2875,24 @@ class HUDWindow(QMainWindow):
             al.setFixedWidth(MINI_AMOUNT_W)
             al.setStyleSheet("background:transparent;")
             set_lbl_color(al, color)
-            hl.addWidget(al, 0)
+            hl1.addWidget(al, 0)
 
-            self._mini_layout.addWidget(row_w)
+            gvbox.addWidget(hdr_row)
+
+            # ── row 2: [MiniBar full width] ───────────────────────────────
+            bar_row = QWidget()
+            bar_row.setAttribute(Qt.WA_TranslucentBackground)
+            hl2 = QHBoxLayout(bar_row)
+            hl2.setContentsMargins(0, 0, 0, 0)
+            hl2.setSpacing(0)
+
+            bar = MiniBar(h=CHIP_H)
+            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            bar.set_value(partial_frac, color)
+            hl2.addWidget(bar, 1)
+
+            gvbox.addWidget(bar_row)
+            self._mini_layout.addWidget(group)
             self._mini_groups.append((lbl, al))
 
     def _on_error(self, err: str):
