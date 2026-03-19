@@ -251,7 +251,6 @@ WIN_W_MAX = 500
 WIN_H     = 660
 SNAP_PX       = 30      # px threshold for edge-snap on drag release
 MINI_AMOUNT_W = 56      # mini-mode: fixed amount column width (px)
-MINI_STACK_N  = 10      # mini-mode: max stack bars per row
 ARC_MIN_W = 240
 
 
@@ -2795,15 +2794,15 @@ class HUDWindow(QMainWindow):
                 f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}")
 
     def _update_mini(self, d: dict):
-        """Rebuild mini-mode bar rows.
+        """Rebuild mini-mode bar rows — one row per credit type.
 
-        Per credit type (Plan / Bonus / On-Demand):
-          Header row  — type name on its own line (full width).
-          Stack rows  — one per MINI_STACK_N full units consumed (only when amount > base_limit).
-          Bottom row  — always present; full-width MiniBar + amount label.
+        Layout per row:  [label ×N]  [MiniBar ──────────────]  [$XX.XX]
+          label: type name + overflow badge (×N) when usage exceeds base_limit.
+          bar:   progress within the current base_limit unit (0–100 %).
+          amount: total spent for this type.
 
-        Stack rows and bottom row share the same gauge width (bars start at x=0).
-        Stack rows have a MINI_AMOUNT_W right-spacer to align with the bottom row's amount label.
+        ×N formula: (amount-1)//base_limit so that amount==base_limit shows
+        the bar at 100 % with no badge (still within the first unit).
         """
         # ── clear previous widgets ─────────────────────────────────────────
         while self._mini_layout.count():
@@ -2826,63 +2825,22 @@ class HUDWindow(QMainWindow):
 
         for label_key, amount, color in rows_spec:
             label_text = S(self.settings, label_key)
-            # Stacks appear only when amount strictly exceeds base_limit.
-            # full_units = completed units already passed (bottom bar tracks the current unit).
-            # Using (amount-1)//base_limit keeps amount==base_limit in the bottom bar at 100%.
             full_units   = (amount - 1) // base_limit if amount > 0 else 0
             partial_frac = (amount - full_units * base_limit) / base_limit
-            n_stack_rows = (full_units + MINI_STACK_N - 1) // MINI_STACK_N if full_units > 0 else 0
 
-            group = QWidget()
-            group.setAttribute(Qt.WA_TranslucentBackground)
-            gvbox = QVBoxLayout(group)
-            gvbox.setContentsMargins(0, 0, 0, 0)
-            gvbox.setSpacing(2)
-
-            # ── header row (type name on its own line) ────────────────────
-            hdr = QLabel(label_text)
-            hdr.setFont(QFont(_UI_FONT, 8))
-            set_lbl_color(hdr, color)
-            hdr.setStyleSheet("background:transparent;")
-            gvbox.addWidget(hdr)
-            label_lbl = hdr  # stored for _apply_scale font scaling
-
-            # ── stack rows ────────────────────────────────────────────────
-            for sr in range(n_stack_rows):
-                row_w = QWidget()
-                row_w.setAttribute(Qt.WA_TranslucentBackground)
-                hl = QHBoxLayout(row_w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setSpacing(0)
-
-                # 10 equal-stretch bars
-                bars_w = QWidget()
-                bars_w.setAttribute(Qt.WA_TranslucentBackground)
-                bl = QHBoxLayout(bars_w)
-                bl.setContentsMargins(0, 0, 0, 0)
-                bl.setSpacing(3)
-                filled = min(MINI_STACK_N, full_units - sr * MINI_STACK_N)
-                for _ in range(filled):
-                    b = MiniBar(h=6)
-                    b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                    b.set_value(1.0, color)
-                    bl.addWidget(b, 1)
-                hl.addWidget(bars_w, 1)
-
-                # right spacer — keeps gauge right-edge aligned with bottom row
-                spc = QWidget()
-                spc.setFixedWidth(MINI_AMOUNT_W)
-                spc.setAttribute(Qt.WA_TranslucentBackground)
-                hl.addWidget(spc, 0)
-
-                gvbox.addWidget(row_w)
-
-            # ── bottom row (always) ───────────────────────────────────────
-            bot_w = QWidget()
-            bot_w.setAttribute(Qt.WA_TranslucentBackground)
-            hl = QHBoxLayout(bot_w)
+            row_w = QWidget()
+            row_w.setAttribute(Qt.WA_TranslucentBackground)
+            hl = QHBoxLayout(row_w)
             hl.setContentsMargins(0, 0, 0, 0)
-            hl.setSpacing(0)
+            hl.setSpacing(4)
+
+            # label + optional ×N overflow badge
+            badge    = f" ×{full_units}" if full_units > 0 else ""
+            lbl      = QLabel(label_text + badge)
+            lbl.setFont(QFont(_UI_FONT, 8))
+            set_lbl_color(lbl, color)
+            lbl.setStyleSheet("background:transparent;")
+            hl.addWidget(lbl, 0)
 
             bar = MiniBar(h=6)
             bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -2893,14 +2851,12 @@ class HUDWindow(QMainWindow):
             al.setFont(QFont(_UI_FONT, 9, QFont.Bold))
             al.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             al.setFixedWidth(MINI_AMOUNT_W)
-            al.setStyleSheet("background:transparent; padding-left:4px;")
+            al.setStyleSheet("background:transparent;")
             set_lbl_color(al, color)
-            amount_lbl = al
             hl.addWidget(al, 0)
 
-            gvbox.addWidget(bot_w)
-            self._mini_layout.addWidget(group)
-            self._mini_groups.append((label_lbl, amount_lbl))
+            self._mini_layout.addWidget(row_w)
+            self._mini_groups.append((lbl, al))
 
     def _on_error(self, err: str):
         _metrics.inc("fetch_error")
