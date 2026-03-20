@@ -2315,6 +2315,282 @@ class StatusBar(QWidget):
 
 
 # ══════════════════════════════════════════════════════════════
+#  PAGE: ANALYTICS
+# ══════════════════════════════════════════════════════════════
+class AnalyticsPage(QWidget):
+    """Analytics tab — Team Spend + Model Usage.
+
+    Layout (matches CreditsPage pattern):
+      Header row: title label + Refresh button + billing-cycle label
+      section_hdr("TEAM SPEND") + scrollable member rows
+      section_hdr("MODEL USAGE") + model rows with progress bars
+    """
+    refresh_clicked = pyqtSignal()
+
+    def __init__(self, settings: dict):
+        super().__init__()
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.settings = settings
+
+        # ── outer scroll area (full page) ──────────────────────
+        outer = QScrollArea()
+        outer.setWidgetResizable(True)
+        outer.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        outer.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        outer.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        outer.setAttribute(Qt.WA_TranslucentBackground)
+
+        inner = QWidget()
+        inner.setAttribute(Qt.WA_TranslucentBackground)
+        self._cl = QVBoxLayout(inner)
+        self._cl.setContentsMargins(12, 8, 12, 12)
+        self._cl.setSpacing(4)
+
+        # ── header row ─────────────────────────────────────────
+        hdr_row = QWidget()
+        hdr_row.setAttribute(Qt.WA_TranslucentBackground)
+        hl = QHBoxLayout(hdr_row)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(6)
+        title = ql("Analytics", 10, c("t_bright"), bold=True)
+        title.setStyleSheet(title.styleSheet() +
+                            f"letter-spacing:1px;font-family:{_UI_FONT};")
+        hl.addWidget(title, 1)
+        self._cycle_lbl = ql("", 8, c("t_dim"))
+        hl.addWidget(self._cycle_lbl, 0)
+        self._refresh_btn = QPushButton(S(settings, "analytics_refresh"))
+        self._refresh_btn.setFixedHeight(20)
+        self._refresh_btn.setCursor(Qt.PointingHandCursor)
+        self._refresh_btn.clicked.connect(self.refresh_clicked)
+        hl.addWidget(self._refresh_btn, 0)
+        self._cl.addWidget(hdr_row)
+
+        # ── Team Spend section ──────────────────────────────────
+        self._hdr_team = section_hdr(S(settings, "analytics_team_spend"), "accent")
+        self._cl.addWidget(self._hdr_team)
+        self._team_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
+        self._cl.addWidget(self._team_status)
+        self._team_scroll = QScrollArea()
+        self._team_scroll.setWidgetResizable(True)
+        self._team_scroll.setMaximumHeight(160)
+        self._team_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._team_scroll.setStyleSheet(
+            "QScrollArea{background:transparent;border:none;}")
+        self._team_scroll.setAttribute(Qt.WA_TranslucentBackground)
+        self._team_scroll.hide()
+        self._cl.addWidget(self._team_scroll)
+
+        # ── Model Usage section ─────────────────────────────────
+        self._cl.addSpacing(6)
+        self._hdr_model = section_hdr(S(settings, "analytics_model_usage"), "accent")
+        self._cl.addWidget(self._hdr_model)
+        self._model_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
+        self._cl.addWidget(self._model_status)
+        self._model_container = QWidget()
+        self._model_container.setAttribute(Qt.WA_TranslucentBackground)
+        self._model_vbox = QVBoxLayout(self._model_container)
+        self._model_vbox.setContentsMargins(0, 0, 0, 0)
+        self._model_vbox.setSpacing(4)
+        self._model_container.hide()
+        self._cl.addWidget(self._model_container)
+
+        self._cl.addStretch(1)
+        outer.setWidget(inner)
+
+        page_layout = QVBoxLayout(self)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.addWidget(outer)
+
+        self._apply_btn_style()
+
+    # ── Public API ────────────────────────────────────────────
+
+    def show_waiting(self):
+        """Show 'waiting for data' state (DataFetcher not yet ready)."""
+        self._team_status.setText(S(self.settings, "analytics_waiting"))
+        self._team_scroll.hide()
+        self._model_status.setText(S(self.settings, "analytics_waiting"))
+        self._model_container.hide()
+        self._cycle_lbl.setText("")
+
+    def show_loading(self):
+        """Show loading state while AnalyticsFetcher is running."""
+        self._team_status.setText(S(self.settings, "analytics_loading"))
+        self._team_status.show()
+        self._team_scroll.hide()
+        self._model_status.setText(S(self.settings, "analytics_loading"))
+        self._model_status.show()
+        self._model_container.hide()
+
+    def show_error(self, msg: str):
+        txt = f"{S(self.settings, 'analytics_error')}: {msg}"
+        self._team_status.setText(txt)
+        self._team_status.show()
+        self._team_scroll.hide()
+        self._model_status.setText(txt)
+        self._model_status.show()
+        self._model_container.hide()
+
+    def show_no_team(self):
+        """Show no-team-id message in Team Spend section only."""
+        self._team_status.setText(S(self.settings, "analytics_no_team_id"))
+        self._team_status.show()
+        self._team_scroll.hide()
+
+    def set_cycle_label(self, start: str, end: str):
+        """Set billing cycle label. start/end are YYYY-MM-DD strings."""
+        self._cycle_lbl.setText(
+            f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}")
+
+    def update_data(self, data: dict):
+        """Populate both sections from AnalyticsFetcher ready() payload."""
+        self._update_team_spend(data.get("team_spend", []))
+        self._update_model_usage(data.get("model_usage", {}))
+
+    def _update_team_spend(self, members: list):
+        if not members:
+            self._team_status.setText(S(self.settings, "analytics_no_data"))
+            self._team_status.show()
+            self._team_scroll.hide()
+            return
+
+        total_cents = sum(m.get("spendCents", 0) for m in members)
+        n = len(members)
+        badge = (f"{n} {S(self.settings, 'analytics_members')}"
+                 f" · {usd(total_cents)}")
+        self._hdr_team.setText(
+            S(self.settings, "analytics_team_spend").upper()
+            + f"  {badge}")
+
+        inner = QWidget()
+        inner.setAttribute(Qt.WA_TranslucentBackground)
+        vbox = QVBoxLayout(inner)
+        vbox.setContentsMargins(0, 2, 0, 2)
+        vbox.setSpacing(0)
+
+        for m in members:
+            spend = m.get("spendCents", 0)
+            row = QWidget()
+            row.setAttribute(Qt.WA_TranslucentBackground)
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 2, 0, 2)
+            rl.setSpacing(4)
+            name_lbl = ql(m.get("name", "—"), 9, c("t_body"))
+            if spend == 0:
+                name_lbl.setStyleSheet(
+                    name_lbl.styleSheet() + "opacity:0.5;color:rgba(180,190,210,128);")
+            rl.addWidget(name_lbl, 1)
+            cost_lbl = ql(usd(spend), 9,
+                          c("t_body") if spend == 0 else c("c_amber"))
+            if spend == 0:
+                cost_lbl.setStyleSheet(
+                    cost_lbl.styleSheet() + "color:rgba(180,190,210,100);")
+            cost_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            rl.addWidget(cost_lbl, 0)
+            vbox.addWidget(row)
+
+        vbox.addStretch(1)
+        self._team_scroll.setWidget(inner)
+        self._team_status.hide()
+        self._team_scroll.show()
+
+    def _update_model_usage(self, model_agg: dict):
+        # Clear previous rows
+        while self._model_vbox.count():
+            item = self._model_vbox.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        if not model_agg:
+            self._model_status.setText(S(self.settings, "analytics_no_data"))
+            self._model_status.show()
+            self._model_container.hide()
+            return
+
+        total_cents = sum(v["cost_cents"] for v in model_agg.values())
+        if total_cents == 0:
+            self._model_status.setText(S(self.settings, "analytics_no_data"))
+            self._model_status.show()
+            self._model_container.hide()
+            return
+
+        sorted_models = sorted(model_agg.items(),
+                               key=lambda x: x[1]["cost_cents"], reverse=True)
+        n = len(sorted_models)
+        max_cents = sorted_models[0][1]["cost_cents"]
+
+        for rank, (model_name, entry) in enumerate(sorted_models):
+            cost_cents = entry["cost_cents"]
+            pct = cost_cents / total_cents if total_cents else 0.0
+            bar_frac = cost_cents / max_cents if max_cents else 0.0
+            # opacity: rank 0 → 1.0, last → 0.4 (linear)
+            opacity = 1.0 - (rank / max(n - 1, 1)) * 0.6
+
+            row = QWidget()
+            row.setAttribute(Qt.WA_TranslucentBackground)
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 1, 0, 1)
+            rl.setSpacing(6)
+
+            name_lbl = ql(model_name, 8, c("t_body"))
+            alpha = int(opacity * 255)
+            col = c("t_body")
+            name_lbl.setStyleSheet(
+                f"background:transparent;color:rgba({col.red()},"
+                f"{col.green()},{col.blue()},{alpha});")
+            rl.addWidget(name_lbl, 2)
+
+            bar = MiniBar(h=4)
+            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            bar.set_value(bar_frac, c("accent"))
+            rl.addWidget(bar, 3)
+
+            pct_lbl = ql(f"{pct:.0%}", 8, c("t_dim"))
+            pct_lbl.setFixedWidth(32)
+            pct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            rl.addWidget(pct_lbl, 0)
+
+            cost_lbl = ql(usd(cost_cents), 8, c("accent"))
+            cost_col = c("accent")
+            cost_lbl.setStyleSheet(
+                f"background:transparent;color:rgba({cost_col.red()},"
+                f"{cost_col.green()},{cost_col.blue()},{alpha});")
+            cost_lbl.setFixedWidth(48)
+            cost_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            rl.addWidget(cost_lbl, 0)
+
+            self._model_vbox.addWidget(row)
+
+        self._model_status.hide()
+        self._model_container.show()
+
+    def refresh_theme(self):
+        self._apply_btn_style()
+        set_lbl_color(self._cycle_lbl, c("t_dim"))
+        set_lbl_color(self._team_status, c("t_dim"))
+        set_lbl_color(self._model_status, c("t_dim"))
+        self._hdr_team.setStyleSheet(
+            ql("", 8, c("accent"), bold=True).styleSheet()
+            + "letter-spacing:1.5px;")
+        self._hdr_model.setStyleSheet(
+            ql("", 8, c("accent"), bold=True).styleSheet()
+            + "letter-spacing:1.5px;")
+
+    def refresh_labels(self):
+        self._refresh_btn.setText(S(self.settings, "analytics_refresh"))
+
+    def _apply_btn_style(self):
+        ac = c("accent").name()
+        mu = c("t_muted").name()
+        self._refresh_btn.setStyleSheet(
+            f"QPushButton{{color:{mu};background:rgba(255,255,255,0.05);"
+            f"border:1px solid rgba(255,255,255,0.1);border-radius:3px;"
+            f"font-family:{_UI_FONT};font-size:8px;padding:2px 6px;}}"
+            f"QPushButton:hover{{color:{ac};border-color:{ac};}}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════
 #  NAV BAR
 # ══════════════════════════════════════════════════════════════
 class NavBar(QWidget):
