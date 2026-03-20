@@ -2352,10 +2352,10 @@ class AnalyticsPage(QWidget):
         hl = QHBoxLayout(hdr_row)
         hl.setContentsMargins(0, 0, 0, 0)
         hl.setSpacing(6)
-        title = ql("Analytics", 10, c("t_bright"), bold=True)
-        title.setStyleSheet(title.styleSheet() +
-                            f"letter-spacing:1px;font-family:{_UI_FONT};")
-        hl.addWidget(title, 1)
+        self._title_lbl = ql(S(settings, "nav_analytics"), 10, c("t_bright"), bold=True)
+        self._title_lbl.setStyleSheet(self._title_lbl.styleSheet() +
+                                      f"letter-spacing:1px;font-family:{_UI_FONT};")
+        hl.addWidget(self._title_lbl, 1)
         self._cycle_lbl = ql("", 8, c("t_dim"))
         hl.addWidget(self._cycle_lbl, 0)
         self._refresh_btn = QPushButton(S(settings, "analytics_refresh"))
@@ -2478,7 +2478,7 @@ class AnalyticsPage(QWidget):
             name_lbl = ql(m.get("name", "—"), 9, c("t_body"))
             if spend == 0:
                 name_lbl.setStyleSheet(
-                    name_lbl.styleSheet() + "opacity:0.5;color:rgba(180,190,210,128);")
+                    name_lbl.styleSheet() + "color:rgba(180,190,210,128);")
             rl.addWidget(name_lbl, 1)
             cost_lbl = ql(usd(spend), 9,
                           c("t_body") if spend == 0 else c("c_amber"))
@@ -2550,8 +2550,8 @@ class AnalyticsPage(QWidget):
             pct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             rl.addWidget(pct_lbl, 0)
 
-            cost_lbl = ql(usd(cost_cents), 8, c("accent"))
             cost_col = c("accent")
+            cost_lbl = ql(usd(cost_cents), 8)
             cost_lbl.setStyleSheet(
                 f"background:transparent;color:rgba({cost_col.red()},"
                 f"{cost_col.green()},{cost_col.blue()},{alpha});")
@@ -2578,6 +2578,7 @@ class AnalyticsPage(QWidget):
 
     def refresh_labels(self):
         self._refresh_btn.setText(S(self.settings, "analytics_refresh"))
+        self._title_lbl.setText(S(self.settings, "nav_analytics"))
 
     def _apply_btn_style(self):
         ac = c("accent").name()
