@@ -2468,7 +2468,7 @@ class AnalyticsPage(QWidget):
         vbox.setContentsMargins(0, 2, 0, 2)
         vbox.setSpacing(0)
 
-        for m in members:
+        for m in sorted(members, key=lambda x: x.get("spendCents", 0), reverse=True):
             spend = m.get("spendCents", 0)
             row = QWidget()
             row.setAttribute(Qt.WA_TranslucentBackground)
