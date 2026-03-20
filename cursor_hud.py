@@ -2617,6 +2617,19 @@ class NavBar(QWidget):
             self._btns.append(btn)
             hl.addWidget(btn, 1)
 
+        # Analytics tab — experimental, hidden by default
+        self._analytics_btn = QPushButton(S(settings, "nav_analytics"))
+        self._analytics_btn.setCheckable(True)
+        self._analytics_btn.setFixedHeight(28)
+        self._analytics_btn.setCursor(Qt.PointingHandCursor)
+        self._apply_style(self._analytics_btn)
+        self._analytics_btn.clicked.connect(
+            lambda: self.tab_clicked.emit(3))
+        self._analytics_btn.setVisible(
+            settings.get("show_experimental", False))
+        self._btns.append(self._analytics_btn)
+        hl.addWidget(self._analytics_btn, 1)
+
     def _apply_style(self, btn):
         ac = c("accent").name()
         mu = c("t_muted").name()
@@ -2633,9 +2646,13 @@ class NavBar(QWidget):
         for i, btn in enumerate(self._btns):
             btn.setChecked(i == idx)
 
+    def set_analytics_visible(self, visible: bool):
+        self._analytics_btn.setVisible(visible)
+
     def refresh_labels(self):
         for i, key in enumerate(self.TABS):
             self._btns[i].setText(S(self.settings, key))
+        self._analytics_btn.setText(S(self.settings, "nav_analytics"))
 
     def refresh_theme(self):
         for btn in self._btns:
