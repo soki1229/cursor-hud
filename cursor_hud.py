@@ -3213,7 +3213,19 @@ def main():
     app.setApplicationName("CursorHUD")
     app.setQuitOnLastWindowClosed(True)  # close window = quit app (tray is supplementary)
 
-    if not getattr(sys, "frozen", False):
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "com.cursor-hud.app"
+            )
+        except Exception:
+            pass
+    if getattr(sys, "frozen", False):
+        if sys.platform == "win32":
+            # Load icon from the EXE's embedded resource (set by PyInstaller --icon)
+            app.setWindowIcon(QIcon(sys.executable))
+    else:
         if sys.platform == "win32":
             _icon_p = _app_dir() / "assets" / "icon.ico"
         else:
