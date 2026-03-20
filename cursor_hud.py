@@ -705,6 +705,117 @@ class CsvFetcher(QThread):
             self.error.emit("Request failed — see log for details.")
 
 
+class AnalyticsFetcher(QThread):
+    """Fetch Analytics data: team spend (POST) + model cost aggregation (CSV stream).
+
+    Emits ready(dict) with keys:
+      "team_spend"  : list[dict]  — members sorted by spendCents desc
+      "model_usage" : dict        — {model_name: {"count": int, "cost_cents": int}}
+    """
+    ready = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, team_id: str, start_ms: int, end_ms: int,
+                 is_enterprise: bool):
+        super().__init__()
+        self._team_id       = team_id
+        self._start_ms      = start_ms
+        self._end_ms        = end_ms
+        self._is_enterprise = is_enterprise
+
+    def run(self):
+        try:
+            cookie, _ = read_cursor_token()
+            if not cookie:
+                self.error.emit("No auth token found.")
+                return
+            hdrs = api_headers(cookie)
+
+            # ── 1. Team Spend ───────────────────────────────────────
+            team_spend: list[dict] = []
+            if self._team_id:
+                post_hdrs = dict(hdrs)
+                post_hdrs["content-type"] = "application/json"
+                post_hdrs["origin"]       = "https://cursor.com"
+                post_hdrs["referer"]      = "https://cursor.com/dashboard"
+                body = {
+                    "teamId":        int(self._team_id),
+                    "pageSize":      5000,
+                    "sortBy":        "name",
+                    "sortDirection": "asc",
+                    "page":          1,
+                }
+                r = requests.post(
+                    f"{BASE_URL}/api/dashboard/get-team-spend",
+                    json=body, headers=post_hdrs, timeout=30,
+                )
+                log.info("AnalyticsFetcher team-spend → HTTP %s", r.status_code)
+                if r.ok:
+                    members = r.json().get("teamMemberSpend", [])
+                    team_spend = sorted(
+                        members,
+                        key=lambda m: m.get("spendCents", 0),
+                        reverse=True,
+                    )
+                else:
+                    log.warning("team-spend HTTP %s: %s", r.status_code,
+                                r.text[:120])
+
+            # ── 2. Model cost aggregation via CSV stream ─────────────
+            model_agg: dict[str, dict] = {}
+            csv_params = {
+                "isEnterprise": str(self._is_enterprise).lower(),
+                "startDate":    self._start_ms,
+                "endDate":      self._end_ms,
+                "strategy":     "tokens",
+            }
+            if self._team_id:
+                csv_params["teamId"] = self._team_id
+            csv_hdrs = dict(hdrs)
+            csv_hdrs["Accept"] = "text/csv,*/*"
+            first_line = True
+            with requests.get(
+                f"{BASE_URL}/api/dashboard/export-usage-events-csv",
+                params=csv_params, headers=csv_hdrs,
+                stream=True, timeout=30, allow_redirects=True,
+            ) as r:
+                if r.ok:
+                    for raw_line in r.iter_lines():
+                        if not raw_line:
+                            continue
+                        line = raw_line.decode("utf-8", errors="replace")
+                        if first_line:          # skip CSV header row
+                            first_line = False
+                            continue
+                        cols = line.split(",")
+                        if len(cols) < 12:
+                            continue
+                        model    = cols[3].strip().strip('"')
+                        cost_str = cols[-1].strip().strip('"').lstrip("$")
+                        try:
+                            cost_cents = int(round(float(cost_str or "0") * 100))
+                        except ValueError:
+                            cost_cents = 0
+                        if not model:
+                            continue
+                        entry = model_agg.setdefault(
+                            model, {"count": 0, "cost_cents": 0})
+                        entry["count"]      += 1
+                        entry["cost_cents"] += cost_cents
+                else:
+                    log.warning("AnalyticsFetcher CSV → HTTP %s", r.status_code)
+
+            log.info("AnalyticsFetcher done — %d members, %d models",
+                     len(team_spend), len(model_agg))
+            self.ready.emit({
+                "team_spend":  team_spend,
+                "model_usage": model_agg,
+            })
+        except Exception:
+            log.exception("AnalyticsFetcher.run")
+            self.error.emit("Request failed — see log for details.")
+
+
 # ══════════════════════════════════════════════════════════════
 #  HELPERS
 # ══════════════════════════════════════════════════════════════
