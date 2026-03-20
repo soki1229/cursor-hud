@@ -19,6 +19,7 @@ import tempfile
 import base64
 import json
 import math
+import csv as _csv
 import datetime as _dt
 from datetime import datetime, timezone, date as _date
 from pathlib import Path
@@ -734,32 +735,39 @@ class AnalyticsFetcher(QThread):
             # ── 1. Team Spend ───────────────────────────────────────
             team_spend: list[dict] = []
             if self._team_id:
-                post_hdrs = dict(hdrs)
-                post_hdrs["content-type"] = "application/json"
-                post_hdrs["origin"]       = "https://cursor.com"
-                post_hdrs["referer"]      = "https://cursor.com/dashboard"
-                body = {
-                    "teamId":        int(self._team_id),
-                    "pageSize":      5000,
-                    "sortBy":        "name",
-                    "sortDirection": "asc",
-                    "page":          1,
-                }
-                r = requests.post(
-                    f"{BASE_URL}/api/dashboard/get-team-spend",
-                    json=body, headers=post_hdrs, timeout=30,
-                )
-                log.info("AnalyticsFetcher team-spend → HTTP %s", r.status_code)
-                if r.ok:
-                    members = r.json().get("teamMemberSpend", [])
-                    team_spend = sorted(
-                        members,
-                        key=lambda m: m.get("spendCents", 0),
-                        reverse=True,
+                try:
+                    team_id_int = int(self._team_id)
+                except ValueError:
+                    log.warning("AnalyticsFetcher: invalid teamId %r, skipping team-spend",
+                                self._team_id)
+                    team_id_int = None
+                if team_id_int is not None:
+                    post_hdrs = dict(hdrs)
+                    post_hdrs["content-type"] = "application/json"
+                    post_hdrs["origin"]       = "https://cursor.com"
+                    post_hdrs["referer"]      = "https://cursor.com/dashboard"
+                    body = {
+                        "teamId":        team_id_int,
+                        "pageSize":      5000,
+                        "sortBy":        "name",
+                        "sortDirection": "asc",
+                        "page":          1,
+                    }
+                    r = requests.post(
+                        f"{BASE_URL}/api/dashboard/get-team-spend",
+                        json=body, headers=post_hdrs, timeout=30,
                     )
-                else:
-                    log.warning("team-spend HTTP %s: %s", r.status_code,
-                                r.text[:120])
+                    log.info("AnalyticsFetcher team-spend → HTTP %s", r.status_code)
+                    if r.ok:
+                        members = r.json().get("teamMemberSpend", [])
+                        team_spend = sorted(
+                            members,
+                            key=lambda m: m.get("spendCents", 0),
+                            reverse=True,
+                        )
+                    else:
+                        log.warning("team-spend HTTP %s: %s", r.status_code,
+                                    r.text[:120])
 
             # ── 2. Model cost aggregation via CSV stream ─────────────
             model_agg: dict[str, dict] = {}
@@ -787,11 +795,14 @@ class AnalyticsFetcher(QThread):
                         if first_line:          # skip CSV header row
                             first_line = False
                             continue
-                        cols = line.split(",")
+                        try:
+                            cols = next(_csv.reader([line]))
+                        except Exception:
+                            continue
                         if len(cols) < 12:
                             continue
-                        model    = cols[3].strip().strip('"')
-                        cost_str = cols[-1].strip().strip('"').lstrip("$")
+                        model    = cols[3].strip()
+                        cost_str = cols[-1].strip().lstrip("$")
                         try:
                             cost_cents = int(round(float(cost_str or "0") * 100))
                         except ValueError:
