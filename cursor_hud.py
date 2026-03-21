@@ -515,11 +515,9 @@ class DataFetcher(QThread):
             sess.headers.update(api_headers(cookie))
             summary = self._get(sess, "/api/usage-summary")
             profile = self._get(sess, "/api/auth/me")
-            if not summary:
-                self.error.emit(S(load_settings(), "err_api"))
-                return
             raw = {
-                "summary":    summary,
+                "summary":    summary or {},
+                "summary_ok": summary is not None,
                 "profile":    profile or {},
                 "email":      email,
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
@@ -2366,33 +2364,43 @@ class AnalyticsPage(QWidget):
         self._cl.addWidget(hdr_row)
 
         # ── Team Spend section ──────────────────────────────────
+        self._team_card = Card("accent")
+        tcl = QVBoxLayout(self._team_card)
+        tcl.setContentsMargins(10, 8, 10, 10)
+        tcl.setSpacing(4)
         self._hdr_team = section_hdr(S(settings, "analytics_team_spend"), "accent")
-        self._cl.addWidget(self._hdr_team)
+        tcl.addWidget(self._hdr_team)
         self._team_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
-        self._cl.addWidget(self._team_status)
+        tcl.addWidget(self._team_status)
         self._team_scroll = QScrollArea()
         self._team_scroll.setWidgetResizable(True)
-        self._team_scroll.setMaximumHeight(160)
+        self._team_scroll.setMaximumHeight(150)
         self._team_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._team_scroll.setStyleSheet(
             "QScrollArea{background:transparent;border:none;}")
         self._team_scroll.setAttribute(Qt.WA_TranslucentBackground)
         self._team_scroll.hide()
-        self._cl.addWidget(self._team_scroll)
+        tcl.addWidget(self._team_scroll)
+        self._cl.addWidget(self._team_card)
 
         # ── Model Usage section ─────────────────────────────────
         self._cl.addSpacing(6)
+        self._model_card = Card("accent")
+        mcl = QVBoxLayout(self._model_card)
+        mcl.setContentsMargins(10, 8, 10, 10)
+        mcl.setSpacing(4)
         self._hdr_model = section_hdr(S(settings, "analytics_model_usage"), "accent")
-        self._cl.addWidget(self._hdr_model)
+        mcl.addWidget(self._hdr_model)
         self._model_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
-        self._cl.addWidget(self._model_status)
+        mcl.addWidget(self._model_status)
         self._model_container = QWidget()
         self._model_container.setAttribute(Qt.WA_TranslucentBackground)
         self._model_vbox = QVBoxLayout(self._model_container)
         self._model_vbox.setContentsMargins(0, 0, 0, 0)
         self._model_vbox.setSpacing(4)
         self._model_container.hide()
-        self._cl.addWidget(self._model_container)
+        mcl.addWidget(self._model_container)
+        self._cl.addWidget(self._model_card)
 
         self._cl.addStretch(1)
         outer.setWidget(inner)
@@ -3303,15 +3311,23 @@ class HUDWindow(QMainWindow):
         self._last_raw  = raw
         self._last_data = parse_data(raw)
         d = self._last_data
-        self._pg_credits.update_data(d)
         self._pg_profile.update_data(d)
-        self._pg_credits.set_error("")
-        self._status.set_status("mock" if self._mock_file else "ok")
-        cr = d["credit"]
-        od = d["on_demand"]
-        # Format: spent base_used$/base_total$ (pct%),\tbonus bonus$\t+ extra overage$
-        msg = (f"{'[MOCK] ' if self._mock_file else ''}data updated — ({cr['budget_pct']:.1f}%) | {usd(cr['budget_used'])} | {usd(cr['bonus_used'])} | {usd(od['personal'])} |")
-        log.info("%s", msg)
+        if not raw.get("summary_ok", True):
+            self._pg_credits.set_error(S(self.settings, "err_api"))
+            self._status.set_status("error")
+        else:
+            self._pg_credits.update_data(d)
+            self._pg_credits.set_error("")
+            self._status.set_status("mock" if self._mock_file else "ok")
+        if raw.get("summary_ok", True):
+            cr = d["credit"]
+            od = d["on_demand"]
+            msg = (f"{'[MOCK] ' if self._mock_file else ''}data updated — "
+                   f"({cr['budget_pct']:.1f}%) | {usd(cr['budget_used'])} | "
+                   f"{usd(cr['bonus_used'])} | {usd(od['personal'])} |")
+            log.info("%s", msg)
+        else:
+            log.warning("data updated (profile only — usage-summary unavailable)")
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
         # If Analytics tab was opened before first data arrived, fetch now
