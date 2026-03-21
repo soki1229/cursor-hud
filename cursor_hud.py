@@ -502,7 +502,14 @@ class DataFetcher(QThread):
                 loc = BASE_URL + loc
             r = session.get(loc, timeout=12)
         log.debug("GET %s → %s", path, r.status_code)
-        return r.json() if r.ok else None
+        if not r.ok:
+            return None
+        try:
+            return r.json()
+        except ValueError:
+            log.warning("GET %s → non-JSON body (HTTP %s): %.80r",
+                        path, r.status_code, r.text)
+            return None
 
     def run(self):
         cookie = ""
@@ -525,7 +532,8 @@ class DataFetcher(QThread):
             self.ready.emit(raw)
         except Exception as exc:
             cookie = "[REDACTED]"  # prevent token leaking in traceback
-            log.exception("DataFetcher.run")
+            log.error("DataFetcher.run: %s: %s",
+                      type(exc).__name__, exc, exc_info=False)
             self.error.emit(str(exc))
 
 
