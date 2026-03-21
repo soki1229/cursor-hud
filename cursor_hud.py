@@ -2341,10 +2341,10 @@ class AnalyticsPage(QWidget):
         # ── outer scroll area (full page) ──────────────────────
         outer = QScrollArea()
         outer.setWidgetResizable(True)
+        outer.setFrameShape(QFrame.NoFrame)
         outer.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         outer.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        outer.setStyleSheet("QScrollArea{background:transparent;border:none;}")
-        outer.setAttribute(Qt.WA_TranslucentBackground)
+        outer.setStyleSheet("background:transparent;")
 
         inner = QWidget()
         inner.setAttribute(Qt.WA_TranslucentBackground)
@@ -2382,11 +2382,10 @@ class AnalyticsPage(QWidget):
         tcl.addWidget(self._team_status)
         self._team_scroll = QScrollArea()
         self._team_scroll.setWidgetResizable(True)
+        self._team_scroll.setFrameShape(QFrame.NoFrame)
         self._team_scroll.setMaximumHeight(150)
         self._team_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._team_scroll.setStyleSheet(
-            "QScrollArea{background:transparent;border:none;}")
-        self._team_scroll.setAttribute(Qt.WA_TranslucentBackground)
+        self._team_scroll.setStyleSheet("background:transparent;")
         self._team_scroll.hide()
         tcl.addWidget(self._team_scroll)
         self._cl.addWidget(self._team_card)
