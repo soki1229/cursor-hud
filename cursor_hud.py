@@ -3082,6 +3082,7 @@ class HUDWindow(QMainWindow):
             if self._analytics_fetcher:
                 self._analytics_fetcher.blockSignals(True)
                 self._analytics_fetcher.quit()
+                self._analytics_fetcher.wait(2000)
                 self._analytics_fetcher.deleteLater()
                 self._analytics_fetcher = None
             if self._stack.currentIndex() == 3:
