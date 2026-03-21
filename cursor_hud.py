@@ -2829,6 +2829,7 @@ class HUDWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+1"), self, lambda: self._switch_tab(0))
         QShortcut(QKeySequence("Ctrl+2"), self, lambda: self._switch_tab(1))
         QShortcut(QKeySequence("Ctrl+3"), self, lambda: self._switch_tab(2))
+        QShortcut(QKeySequence("Ctrl+4"), self, lambda: self._switch_tab(3))
 
     def _on_escape(self):
         if self._mini_mode:
@@ -2959,13 +2960,19 @@ class HUDWindow(QMainWindow):
         self._pg_credits.retry_clicked.connect(self._fetch)
         self._pg_credits.export_csv_clicked.connect(self._on_export_csv)
         self._csv_fetcher: CsvFetcher | None = None
+        self._analytics_fetcher: AnalyticsFetcher | None = None
+        self._analytics_data: dict | None = None  # None until first successful fetch
+        self._analytics_pending: bool = False  # True when tab shown before _on_data fires
         self._pg_profile  = ProfilePage(self.settings)
         self._pg_settings = SettingsPage(self.settings)
         self._pg_settings.changed.connect(self._on_settings_changed)
         self._pg_settings.height_adjust_needed.connect(self._adjust_height)
         self._pg_settings.theme_changed.connect(self._on_theme_changed)
         self._pg_settings.pin_changed.connect(self._on_pin_changed)
-        for pg in [self._pg_credits, self._pg_profile, self._pg_settings]:
+        self._pg_analytics = AnalyticsPage(self.settings)
+        self._pg_analytics.refresh_clicked.connect(self._on_analytics_refresh)
+        for pg in [self._pg_credits, self._pg_profile,
+                   self._pg_settings, self._pg_analytics]:
             self._stack.addWidget(pg)
         vl.addWidget(self._stack)
         vl.addWidget(Divider())
@@ -2998,8 +3005,64 @@ class HUDWindow(QMainWindow):
         self._stack.setCurrentIndex(idx)
         self._nav.set_active(idx)
         self._adjust_height(delay_ms=0)
+        if idx == 3:
+            self._trigger_analytics_fetch(force=False)
+
+    def _trigger_analytics_fetch(self, force: bool = False):
+        """Start AnalyticsFetcher. If _last_data not yet available, defer."""
+        if self._last_data is None:
+            self._pg_analytics.show_waiting()
+            self._analytics_pending = True
+            return
+        self._analytics_pending = False
+        d = self._last_data
+        team_id  = (self.settings.get("csv_team_id", "").strip()
+                    or d.get("team_id", ""))
+        cyc      = d["cycle"]
+        start_ms = _date_to_ms(cyc["start"])
+        end_ms   = _date_to_ms(cyc["end"])
+        is_ent   = d.get("is_enterprise", False)
+        self._pg_analytics.set_cycle_label(cyc["start"], cyc["end"])
+
+        if not team_id:
+            self._pg_analytics.show_no_team()
+            # Still fetch model usage (no teamId needed for personal CSV)
+        if not force and self._analytics_data is not None:
+            # Already have successfully-fetched data — don't re-fetch unless forced
+            return
+        if self._analytics_fetcher:
+            self._analytics_fetcher.blockSignals(True)
+            self._analytics_fetcher.quit()
+            self._analytics_fetcher.wait(2000)
+            self._analytics_fetcher.deleteLater()
+        self._pg_analytics.show_loading()
+        self._analytics_fetcher = AnalyticsFetcher(
+            team_id, start_ms, end_ms, is_ent)
+        self._analytics_fetcher.ready.connect(self._on_analytics_data)
+        self._analytics_fetcher.error.connect(self._on_analytics_error)
+        self._analytics_fetcher.start()
+        log.debug("AnalyticsFetcher started")
+
+    def _on_analytics_refresh(self):
+        """Force re-fetch triggered by Refresh button."""
+        if self._last_data is None:
+            return
+        self._trigger_analytics_fetch(force=True)
+
+    def _on_analytics_data(self, data: dict):
+        self._analytics_data = data
+        self._pg_analytics.update_data(data)
+        self._adjust_height(delay_ms=60)
+        log.info("AnalyticsFetcher data received — %d members, %d models",
+                 len(data.get("team_spend", [])),
+                 len(data.get("model_usage", {})))
+
+    def _on_analytics_error(self, msg: str):
+        self._pg_analytics.show_error(msg)
+        log.error("AnalyticsFetcher error: %s", msg)
 
     def _on_settings_changed(self):
+        self._pg_analytics.refresh_labels()
         self._nav.refresh_labels()
         self._status.refresh_labels()
         self._pg_credits._rebuild_labels()
@@ -3008,9 +3071,13 @@ class HUDWindow(QMainWindow):
         self._pg_credits._personal_card.setVisible(cfg.get("show_personal", True))
         self._pg_credits._org_card.setVisible(cfg.get("show_org", True))
         self._pg_credits._rate_card.setVisible(cfg.get("show_official", True))
-        self._pg_credits.set_experimental_visible(
-            cfg.get("show_experimental", False)
-        )
+        show_exp = cfg.get("show_experimental", False)
+        self._pg_credits.set_experimental_visible(show_exp)
+        self._nav.set_analytics_visible(show_exp)
+        if not show_exp:
+            self._analytics_pending = False
+            if self._stack.currentIndex() == 3:
+                self._switch_tab(0)
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
             self._pg_profile.update_data(self._last_data)
@@ -3031,6 +3098,7 @@ class HUDWindow(QMainWindow):
         self._pg_credits.refresh_theme()
         self._pg_profile.refresh_theme()
         self._pg_settings.refresh_theme()
+        self._pg_analytics.refresh_theme()
         self.update()
         self.repaint()
         if self._last_data:
@@ -3230,6 +3298,11 @@ class HUDWindow(QMainWindow):
         log.info("%s", msg)
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
+        # If Analytics tab was opened before first data arrived, fetch now
+        if self._analytics_pending:
+            self._analytics_pending = False
+            self._trigger_analytics_fetch(force=False)
+
         # Update tray tooltip with credit remaining
         if self._tray:
             cr = d["credit"]
