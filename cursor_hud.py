@@ -234,7 +234,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.7"
+VERSION   = "1.0.0-beta.8"
 BASE_URL  = "https://cursor.com"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
@@ -639,7 +639,7 @@ def parse_data(raw: dict) -> dict:
         "profile.teamId":              pr.get("teamId"),
         "profile.organizationId":      pr.get("organizationId"),
     }
-    log.debug("teamId candidates: %s", _team_candidates)
+    log.info("teamId candidates: %s", _team_candidates)
     team_id = next((str(v) for v in _team_candidates.values() if v), "")
 
     return {
@@ -738,44 +738,7 @@ class AnalyticsFetcher(QThread):
                 return
             hdrs = api_headers(cookie)
 
-            # ── 1. Team Spend ───────────────────────────────────────
-            team_spend: list[dict] = []
-            if self._team_id:
-                try:
-                    team_id_int = int(self._team_id)
-                except ValueError:
-                    log.warning("AnalyticsFetcher: invalid teamId %r, skipping team-spend",
-                                self._team_id)
-                    team_id_int = None
-                if team_id_int is not None:
-                    post_hdrs = dict(hdrs)
-                    post_hdrs["content-type"] = "application/json"
-                    post_hdrs["origin"]       = "https://cursor.com"
-                    post_hdrs["referer"]      = "https://cursor.com/dashboard"
-                    body = {
-                        "teamId":        team_id_int,
-                        "pageSize":      5000,
-                        "sortBy":        "name",
-                        "sortDirection": "asc",
-                        "page":          1,
-                    }
-                    r = requests.post(
-                        f"{BASE_URL}/api/dashboard/get-team-spend",
-                        json=body, headers=post_hdrs, timeout=30,
-                    )
-                    log.info("AnalyticsFetcher team-spend → HTTP %s", r.status_code)
-                    if r.ok:
-                        members = r.json().get("teamMemberSpend", [])
-                        team_spend = sorted(
-                            members,
-                            key=lambda m: m.get("spendCents", 0),
-                            reverse=True,
-                        )
-                    else:
-                        log.warning("team-spend HTTP %s: %s", r.status_code,
-                                    r.text[:120])
-
-            # ── 2. Model cost aggregation via CSV stream ─────────────
+            # ── Model cost aggregation via CSV stream ────────────────
             model_agg: dict[str, dict] = {}
             csv_params = {
                 "isEnterprise": str(self._is_enterprise).lower(),
@@ -805,7 +768,7 @@ class AnalyticsFetcher(QThread):
                             cols = next(_csv.reader([line]))
                         except Exception:
                             continue
-                        if len(cols) < 12:
+                        if len(cols) < 11:
                             continue
                         model    = cols[3].strip()
                         cost_str = cols[-1].strip().lstrip("$")
@@ -822,12 +785,8 @@ class AnalyticsFetcher(QThread):
                 else:
                     log.warning("AnalyticsFetcher CSV → HTTP %s", r.status_code)
 
-            log.info("AnalyticsFetcher done — %d members, %d models",
-                     len(team_spend), len(model_agg))
-            self.ready.emit({
-                "team_spend":  team_spend,
-                "model_usage": model_agg,
-            })
+            log.info("AnalyticsFetcher done — %d models", len(model_agg))
+            self.ready.emit({"model_usage": model_agg})
         except Exception:
             log.exception("AnalyticsFetcher.run")
             self.error.emit("Request failed — see log for details.")
@@ -1164,6 +1123,70 @@ class MiniBar(QWidget):
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, fw, h), r, r)
         p.setClipping(False)
+        p.end()
+
+
+class PieChart(QWidget):
+    """Donut pie chart for model usage breakdown."""
+    _PALETTE = [
+        QColor(91,  141, 239),   # blue
+        QColor(232, 112,  64),   # orange
+        QColor(91,  196, 128),   # green
+        QColor(196,  91, 196),   # purple
+        QColor(232, 192,  64),   # amber
+        QColor( 64, 196, 232),   # cyan
+        QColor(232,  64,  64),   # red
+        QColor( 64, 232, 196),   # teal
+    ]
+    SIZE = 104
+    HOLE = 0.54   # donut hole ratio
+
+    def __init__(self):
+        super().__init__()
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self._fracs:  list[float]  = []
+        self._colors: list[QColor] = []
+        self._center: str          = ""
+
+    def set_data(self, fracs: list[float], colors: list[QColor],
+                 center: str = ""):
+        self._fracs  = fracs
+        self._colors = colors
+        self._center = center
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        m = 4
+        rect = QRectF(m, m, w - 2 * m, h - 2 * m)
+        start = 90 * 16            # top, clockwise
+        for frac, col in zip(self._fracs, self._colors):
+            span = max(16, int(frac * 360 * 16))   # positive, min 1°
+            p.setBrush(QBrush(col))
+            p.setPen(Qt.NoPen)
+            p.drawPie(rect, start, -span)           # negative = clockwise
+            start -= span
+        # donut hole
+        hole_r = (w - 2 * m) * self.HOLE / 2
+        cx, cy = w / 2.0, h / 2.0
+        p.setBrush(QBrush(c("bg_card")))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(QRectF(cx - hole_r, cy - hole_r,
+                             hole_r * 2, hole_r * 2))
+        # center label
+        if self._center:
+            p.setPen(QPen(c("t_bright")))
+            f = p.font()
+            f.setFamily(_UI_FONT)
+            f.setPixelSize(8)
+            f.setBold(True)
+            p.setFont(f)
+            p.drawText(QRectF(cx - hole_r, cy - hole_r,
+                              hole_r * 2, hole_r * 2),
+                       Qt.AlignCenter, self._center)
         p.end()
 
 
@@ -1919,8 +1942,24 @@ class SettingsPage(QWidget):
         cl.setSpacing(8)
         self._t: dict = {}
 
+        hdr_row = QWidget()
+        hdr_row.setAttribute(Qt.WA_TranslucentBackground)
+        hdr_hl = QHBoxLayout(hdr_row)
+        hdr_hl.setContentsMargins(0, 0, 0, 0)
+        hdr_hl.setSpacing(6)
         self._t["settings_title"] = section_hdr(self.T("settings_title"))
-        cl.addWidget(self._t["settings_title"])
+        hdr_hl.addWidget(self._t["settings_title"], 1)
+        self._ver_lbl = ql(f"v{VERSION}", 8, c("t_muted"))
+        hdr_hl.addWidget(self._ver_lbl, 0)
+        self._gh_lbl = QLabel(
+            '<a href="https://github.com/soki1229/cursor-hud"'
+            ' style="color:inherit;text-decoration:none;">GitHub ↗</a>')
+        self._gh_lbl.setOpenExternalLinks(True)
+        self._gh_lbl.setStyleSheet(
+            f"font-size:8px;font-family:{_UI_FONT};"
+            f"color:{c('t_muted').name()};background:transparent;")
+        hdr_hl.addWidget(self._gh_lbl, 0)
+        cl.addWidget(hdr_row)
         cl.addWidget(Divider())
 
         # Language
@@ -2161,6 +2200,12 @@ class SettingsPage(QWidget):
         hdr = self._t.get("settings_title")
         if hdr:
             set_lbl_color(hdr, c("t_muted"))
+        if hasattr(self, "_ver_lbl"):
+            set_lbl_color(self._ver_lbl, c("t_muted"))
+        if hasattr(self, "_gh_lbl"):
+            self._gh_lbl.setStyleSheet(
+                f"font-size:8px;font-family:{_UI_FONT};"
+                f"color:{c('t_muted').name()};background:transparent;")
         for key in ("lang_label", "theme_label", "show_sections"):
             lbl = self._t.get(key)
             if lbl:
@@ -2338,30 +2383,24 @@ class AnalyticsPage(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.settings = settings
 
-        # ── outer scroll area (full page) ──────────────────────
-        outer = QScrollArea()
-        outer.setWidgetResizable(True)
-        outer.setFrameShape(QFrame.NoFrame)
-        outer.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        outer.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        outer.setStyleSheet("background:transparent;")
+        vl = QVBoxLayout(self)
+        vl.setContentsMargins(12, 8, 12, 8)
+        vl.setSpacing(6)
 
-        inner = QWidget()
-        inner.setAttribute(Qt.WA_TranslucentBackground)
-        self._cl = QVBoxLayout(inner)
-        self._cl.setContentsMargins(12, 8, 12, 12)
-        self._cl.setSpacing(4)
+        # ── Model Usage card ────────────────────────────────────
+        self._model_card = Card("accent")
+        mcl = QVBoxLayout(self._model_card)
+        mcl.setContentsMargins(10, 8, 10, 10)
+        mcl.setSpacing(4)
 
-        # ── header row ─────────────────────────────────────────
+        # header row: section title + cycle label + refresh button
         hdr_row = QWidget()
         hdr_row.setAttribute(Qt.WA_TranslucentBackground)
         hl = QHBoxLayout(hdr_row)
         hl.setContentsMargins(0, 0, 0, 0)
         hl.setSpacing(6)
-        self._title_lbl = ql(S(settings, "nav_analytics"), 10, c("t_bright"), bold=True)
-        self._title_lbl.setStyleSheet(self._title_lbl.styleSheet() +
-                                      f"letter-spacing:1px;font-family:{_UI_FONT};")
-        hl.addWidget(self._title_lbl, 1)
+        self._hdr_model = section_hdr(S(settings, "analytics_model_usage"), "accent")
+        hl.addWidget(self._hdr_model, 1)
         self._cycle_lbl = ql("", 8, c("t_dim"))
         hl.addWidget(self._cycle_lbl, 0)
         self._refresh_btn = QPushButton(S(settings, "analytics_refresh"))
@@ -2369,37 +2408,11 @@ class AnalyticsPage(QWidget):
         self._refresh_btn.setCursor(Qt.PointingHandCursor)
         self._refresh_btn.clicked.connect(self.refresh_clicked)
         hl.addWidget(self._refresh_btn, 0)
-        self._cl.addWidget(hdr_row)
+        mcl.addWidget(hdr_row)
 
-        # ── Team Spend section ──────────────────────────────────
-        self._team_card = Card("accent")
-        tcl = QVBoxLayout(self._team_card)
-        tcl.setContentsMargins(10, 8, 10, 10)
-        tcl.setSpacing(4)
-        self._hdr_team = section_hdr(S(settings, "analytics_team_spend"), "accent")
-        tcl.addWidget(self._hdr_team)
-        self._team_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
-        tcl.addWidget(self._team_status)
-        self._team_scroll = QScrollArea()
-        self._team_scroll.setWidgetResizable(True)
-        self._team_scroll.setFrameShape(QFrame.NoFrame)
-        self._team_scroll.setMaximumHeight(150)
-        self._team_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._team_scroll.setStyleSheet("background:transparent;")
-        self._team_scroll.hide()
-        tcl.addWidget(self._team_scroll)
-        self._cl.addWidget(self._team_card)
-
-        # ── Model Usage section ─────────────────────────────────
-        self._cl.addSpacing(6)
-        self._model_card = Card("accent")
-        mcl = QVBoxLayout(self._model_card)
-        mcl.setContentsMargins(10, 8, 10, 10)
-        mcl.setSpacing(4)
-        self._hdr_model = section_hdr(S(settings, "analytics_model_usage"), "accent")
-        mcl.addWidget(self._hdr_model)
         self._model_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
         mcl.addWidget(self._model_status)
+
         self._model_container = QWidget()
         self._model_container.setAttribute(Qt.WA_TranslucentBackground)
         self._model_vbox = QVBoxLayout(self._model_container)
@@ -2407,14 +2420,9 @@ class AnalyticsPage(QWidget):
         self._model_vbox.setSpacing(4)
         self._model_container.hide()
         mcl.addWidget(self._model_container)
-        self._cl.addWidget(self._model_card)
 
-        self._cl.addStretch(1)
-        outer.setWidget(inner)
-
-        page_layout = QVBoxLayout(self)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.addWidget(outer)
+        vl.addWidget(self._model_card)
+        vl.addStretch()
 
         self._apply_btn_style()
 
@@ -2422,35 +2430,21 @@ class AnalyticsPage(QWidget):
 
     def show_waiting(self):
         """Show 'waiting for data' state (DataFetcher not yet ready)."""
-        self._team_status.setText(S(self.settings, "analytics_waiting"))
-        self._team_scroll.hide()
         self._model_status.setText(S(self.settings, "analytics_waiting"))
         self._model_container.hide()
         self._cycle_lbl.setText("")
 
     def show_loading(self):
         """Show loading state while AnalyticsFetcher is running."""
-        self._team_status.setText(S(self.settings, "analytics_loading"))
-        self._team_status.show()
-        self._team_scroll.hide()
         self._model_status.setText(S(self.settings, "analytics_loading"))
         self._model_status.show()
         self._model_container.hide()
 
     def show_error(self, msg: str):
         txt = f"{S(self.settings, 'analytics_error')}: {msg}"
-        self._team_status.setText(txt)
-        self._team_status.show()
-        self._team_scroll.hide()
         self._model_status.setText(txt)
         self._model_status.show()
         self._model_container.hide()
-
-    def show_no_team(self):
-        """Show no-team-id message in Team Spend section only."""
-        self._team_status.setText(S(self.settings, "analytics_no_team_id"))
-        self._team_status.show()
-        self._team_scroll.hide()
 
     def set_cycle_label(self, start: str, end: str):
         """Set billing cycle label. start/end are YYYY-MM-DD strings."""
@@ -2460,59 +2454,11 @@ class AnalyticsPage(QWidget):
             f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}")
 
     def update_data(self, data: dict):
-        """Populate both sections from AnalyticsFetcher ready() payload."""
-        self._update_team_spend(data.get("team_spend", []))
+        """Populate model usage section from AnalyticsFetcher ready() payload."""
         self._update_model_usage(data.get("model_usage", {}))
 
-    def _update_team_spend(self, members: list):
-        if not members:
-            self._team_status.setText(S(self.settings, "analytics_no_data"))
-            self._team_status.show()
-            self._team_scroll.hide()
-            return
-
-        total_cents = sum(m.get("spendCents", 0) for m in members)
-        n = len(members)
-        badge = (f"{n} {S(self.settings, 'analytics_members')}"
-                 f" · {usd(total_cents)}")
-        self._hdr_team.setText(
-            S(self.settings, "analytics_team_spend").upper()
-            + f"  {badge}")
-
-        inner = QWidget()
-        inner.setAttribute(Qt.WA_TranslucentBackground)
-        vbox = QVBoxLayout(inner)
-        vbox.setContentsMargins(0, 2, 0, 2)
-        vbox.setSpacing(0)
-
-        for m in sorted(members, key=lambda x: x.get("spendCents", 0), reverse=True):
-            spend = m.get("spendCents", 0)
-            row = QWidget()
-            row.setAttribute(Qt.WA_TranslucentBackground)
-            rl = QHBoxLayout(row)
-            rl.setContentsMargins(0, 2, 0, 2)
-            rl.setSpacing(4)
-            name_lbl = ql(m.get("name", "—"), 9, c("t_body"))
-            if spend == 0:
-                name_lbl.setStyleSheet(
-                    name_lbl.styleSheet() + "color:rgba(180,190,210,128);")
-            rl.addWidget(name_lbl, 1)
-            cost_lbl = ql(usd(spend), 9,
-                          c("t_body") if spend == 0 else c("c_amber"))
-            if spend == 0:
-                cost_lbl.setStyleSheet(
-                    cost_lbl.styleSheet() + "color:rgba(180,190,210,100);")
-            cost_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            rl.addWidget(cost_lbl, 0)
-            vbox.addWidget(row)
-
-        vbox.addStretch(1)
-        self._team_scroll.setWidget(inner)
-        self._team_status.hide()
-        self._team_scroll.show()
-
     def _update_model_usage(self, model_agg: dict):
-        # Clear previous rows
+        # Clear previous content
         while self._model_vbox.count():
             item = self._model_vbox.takeAt(0)
             if item.widget():
@@ -2533,46 +2479,51 @@ class AnalyticsPage(QWidget):
 
         sorted_models = sorted(model_agg.items(),
                                key=lambda x: x[1]["cost_cents"], reverse=True)
-        n = len(sorted_models)
-        max_cents = sorted_models[0][1]["cost_cents"]
+        palette = PieChart._PALETTE
+        colors  = [palette[i % len(palette)] for i in range(len(sorted_models))]
+        fracs   = [e["cost_cents"] / total_cents for _, e in sorted_models]
 
-        for rank, (model_name, entry) in enumerate(sorted_models):
+        # ── Pie chart (centered) ────────────────────────────────
+        pie_row = QWidget()
+        pie_row.setAttribute(Qt.WA_TranslucentBackground)
+        pie_hl = QHBoxLayout(pie_row)
+        pie_hl.setContentsMargins(0, 4, 0, 4)
+        pie_hl.addStretch(1)
+        pie = PieChart()
+        pie.set_data(fracs, colors, usd(total_cents))
+        pie_hl.addWidget(pie)
+        pie_hl.addStretch(1)
+        self._model_vbox.addWidget(pie_row)
+
+        # ── Legend rows ─────────────────────────────────────────
+        for (model_name, entry), col in zip(sorted_models, colors):
             cost_cents = entry["cost_cents"]
-            pct = cost_cents / total_cents if total_cents else 0.0
-            bar_frac = cost_cents / max_cents if max_cents else 0.0
-            # opacity: rank 0 → 1.0, last → 0.4 (linear)
-            opacity = 1.0 - (rank / max(n - 1, 1)) * 0.6
+            pct = cost_cents / total_cents
 
             row = QWidget()
             row.setAttribute(Qt.WA_TranslucentBackground)
             rl = QHBoxLayout(row)
             rl.setContentsMargins(0, 1, 0, 1)
-            rl.setSpacing(6)
+            rl.setSpacing(5)
+
+            # color swatch
+            swatch = QLabel()
+            swatch.setFixedSize(8, 8)
+            swatch.setStyleSheet(
+                f"background:{col.name()};border-radius:2px;")
+            rl.addWidget(swatch, 0)
 
             name_lbl = ql(model_name, 8, c("t_body"))
-            alpha = int(opacity * 255)
-            col = c("t_body")
-            name_lbl.setStyleSheet(
-                f"background:transparent;color:rgba({col.red()},"
-                f"{col.green()},{col.blue()},{alpha});")
-            rl.addWidget(name_lbl, 2)
-
-            bar = MiniBar(h=4)
-            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            bar.set_value(bar_frac, c("accent"))
-            rl.addWidget(bar, 3)
+            name_lbl.setMaximumWidth(110)
+            rl.addWidget(name_lbl, 1)
 
             pct_lbl = ql(f"{pct:.0%}", 8, c("t_dim"))
-            pct_lbl.setFixedWidth(32)
+            pct_lbl.setFixedWidth(28)
             pct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             rl.addWidget(pct_lbl, 0)
 
-            cost_col = c("accent")
-            cost_lbl = ql(usd(cost_cents), 8)
-            cost_lbl.setStyleSheet(
-                f"background:transparent;color:rgba({cost_col.red()},"
-                f"{cost_col.green()},{cost_col.blue()},{alpha});")
-            cost_lbl.setFixedWidth(48)
+            cost_lbl = ql(usd(cost_cents), 8, c("accent"))
+            cost_lbl.setFixedWidth(44)
             cost_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             rl.addWidget(cost_lbl, 0)
 
@@ -2584,18 +2535,14 @@ class AnalyticsPage(QWidget):
     def refresh_theme(self):
         self._apply_btn_style()
         set_lbl_color(self._cycle_lbl, c("t_dim"))
-        set_lbl_color(self._team_status, c("t_dim"))
         set_lbl_color(self._model_status, c("t_dim"))
-        self._hdr_team.setStyleSheet(
-            ql("", 8, c("accent"), bold=True).styleSheet()
-            + "letter-spacing:1.5px;")
         self._hdr_model.setStyleSheet(
             ql("", 8, c("accent"), bold=True).styleSheet()
             + "letter-spacing:1.5px;")
 
     def refresh_labels(self):
         self._refresh_btn.setText(S(self.settings, "analytics_refresh"))
-        self._title_lbl.setText(S(self.settings, "nav_analytics"))
+        self._hdr_model.setText(S(self.settings, "analytics_model_usage").upper())
         if hasattr(self, "_cycle_start"):
             self._cycle_lbl.setText(
                 f"{S(self.settings, 'analytics_cycle_label')}: "
@@ -2617,7 +2564,8 @@ class AnalyticsPage(QWidget):
 # ══════════════════════════════════════════════════════════════
 class NavBar(QWidget):
     tab_clicked = pyqtSignal(int)
-    TABS = ["nav_credit", "nav_profile", "nav_settings"]
+    TABS = ["nav_credit", "nav_analytics", "nav_profile", "nav_settings"]
+    ANALYTICS_IDX = 1
 
     def __init__(self, settings: dict):
         super().__init__()
@@ -2637,19 +2585,9 @@ class NavBar(QWidget):
             btn.clicked.connect(lambda _, idx=i: self.tab_clicked.emit(idx))
             self._btns.append(btn)
             hl.addWidget(btn, 1)
-
-        # Analytics tab — experimental, hidden by default
-        self._analytics_btn = QPushButton(S(settings, "nav_analytics"))
-        self._analytics_btn.setCheckable(True)
-        self._analytics_btn.setFixedHeight(28)
-        self._analytics_btn.setCursor(Qt.PointingHandCursor)
-        self._apply_style(self._analytics_btn)
-        self._analytics_btn.clicked.connect(
-            lambda: self.tab_clicked.emit(3))
-        self._analytics_btn.setVisible(
+        # Analytics tab hidden by default (experimental)
+        self._btns[self.ANALYTICS_IDX].setVisible(
             settings.get("show_experimental", False))
-        self._btns.append(self._analytics_btn)
-        hl.addWidget(self._analytics_btn, 1)
 
     def _apply_style(self, btn):
         ac = c("accent").name()
@@ -2668,12 +2606,11 @@ class NavBar(QWidget):
             btn.setChecked(i == idx)
 
     def set_analytics_visible(self, visible: bool):
-        self._analytics_btn.setVisible(visible)
+        self._btns[self.ANALYTICS_IDX].setVisible(visible)
 
     def refresh_labels(self):
         for i, key in enumerate(self.TABS):
             self._btns[i].setText(S(self.settings, key))
-        self._analytics_btn.setText(S(self.settings, "nav_analytics"))
 
     def refresh_theme(self):
         for btn in self._btns:
@@ -2992,8 +2929,8 @@ class HUDWindow(QMainWindow):
         self._pg_settings.pin_changed.connect(self._on_pin_changed)
         self._pg_analytics = AnalyticsPage(self.settings)
         self._pg_analytics.refresh_clicked.connect(self._on_analytics_refresh)
-        for pg in [self._pg_credits, self._pg_profile,
-                   self._pg_settings, self._pg_analytics]:
+        for pg in [self._pg_credits, self._pg_analytics,
+                   self._pg_profile, self._pg_settings]:
             self._stack.addWidget(pg)
         vl.addWidget(self._stack)
         vl.addWidget(Divider())
@@ -3022,13 +2959,13 @@ class HUDWindow(QMainWindow):
         self._refresh_title_btns()
 
     def _switch_tab(self, idx: int):
-        if idx == 3 and not self.settings.get("show_experimental", False):
+        if idx == 1 and not self.settings.get("show_experimental", False):
             return
         _metrics.inc(f"tab_{idx}")
         self._stack.setCurrentIndex(idx)
         self._nav.set_active(idx)
         self._adjust_height(delay_ms=0)
-        if idx == 3:
+        if idx == 1:
             self._trigger_analytics_fetch(force=False)
 
     def _trigger_analytics_fetch(self, force: bool = False):
@@ -3047,9 +2984,6 @@ class HUDWindow(QMainWindow):
         is_ent   = d.get("is_enterprise", False)
         self._pg_analytics.set_cycle_label(cyc["start"], cyc["end"])
 
-        if not team_id:
-            self._pg_analytics.show_no_team()
-            # Still fetch model usage (no teamId needed for personal CSV)
         if not force and self._analytics_data is not None:
             # Already have successfully-fetched data — don't re-fetch unless forced
             return
@@ -3077,8 +3011,7 @@ class HUDWindow(QMainWindow):
         self._analytics_data = data
         self._pg_analytics.update_data(data)
         self._adjust_height(delay_ms=60)
-        log.info("AnalyticsFetcher data received — %d members, %d models",
-                 len(data.get("team_spend", [])),
+        log.info("AnalyticsFetcher data received — %d models",
                  len(data.get("model_usage", {})))
 
     def _on_analytics_error(self, msg: str):
@@ -3107,7 +3040,7 @@ class HUDWindow(QMainWindow):
                 self._analytics_fetcher.wait(2000)
                 self._analytics_fetcher.deleteLater()
                 self._analytics_fetcher = None
-            if self._stack.currentIndex() == 3:
+            if self._stack.currentIndex() == 1:
                 self._switch_tab(0)
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
