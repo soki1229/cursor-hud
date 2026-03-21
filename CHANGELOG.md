@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.0.0-beta.8 — 2026-03-21
+
+### Features
+- **Analytics tab** (experimental gate): new tab between Credits and Profile.
+  - Tab order: Credits → Analytics → Profile → Settings (Settings always last).
+  - Model usage donut pie chart: each model gets a distinct color; center shows
+    total cost for the billing cycle.
+  - Legend rows below the chart: color swatch · model name · % share · cost.
+  - Billing cycle label and Refresh button in the card header.
+  - CSV-based cost aggregation via `GET /api/dashboard/export-usage-events-csv`;
+    parsed with `csv.reader` for RFC 4180 compliance.
+  - Team Spend section removed (enterprise API does not expose per-member spend).
+  - Fetcher deferred until `_on_data` has fired; cancelled cleanly when
+    experimental features are disabled.
+  - Keyboard shortcut: Ctrl+2.
+- **Settings page**: version label (`v1.0.0-beta.8`) and GitHub link in the card
+  header; both update color on theme change.
+- **`scripts/check_api.py`**: API endpoint explorer — tests GET + POST endpoints
+  and prints full response bodies to help diagnose token/team-ID issues.
+- **`PieChart` widget**: donut-style pie chart with antialiasing, configurable
+  hole ratio, and center text label.
+
+### Fixes
+- `DataFetcher.run()` no longer early-returns when `/api/usage-summary` fails;
+  always emits `ready()` with `summary_ok: bool` so the Profile tab populates
+  even when the summary endpoint returns an error.
+- `DataFetcher._get()`: wrap `r.json()` in `try/except ValueError` to handle
+  empty or non-JSON 2xx responses without raising `JSONDecodeError`.
+- `log.exception` → `log.error(exc_info=False)` to suppress 3× chained
+  traceback spam from urllib3 in the debug log.
+- Analytics tab background was transparent (showing desktop) due to
+  `WA_TranslucentBackground` on `QScrollArea`; fixed by removing the attribute
+  and using unscoped `"background:transparent;"` stylesheet.
+- CSV column guard corrected from `< 12` to `< 11` (actual column count);
+  previously caused all CSV rows to be silently skipped, resulting in empty
+  Model Usage display.
+- Language buttons now correctly i18n'd: Korean UI shows "한국어" / "영어";
+  English UI shows "Korean" / "English".
+
+---
+
 ## v1.0.0-beta.7 — 2026-03-20
 
 ### Features
