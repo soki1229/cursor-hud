@@ -2439,6 +2439,8 @@ class AnalyticsPage(QWidget):
 
     def set_cycle_label(self, start: str, end: str):
         """Set billing cycle label. start/end are YYYY-MM-DD strings."""
+        self._cycle_start = start
+        self._cycle_end   = end
         self._cycle_lbl.setText(
             f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}")
 
@@ -2579,6 +2581,10 @@ class AnalyticsPage(QWidget):
     def refresh_labels(self):
         self._refresh_btn.setText(S(self.settings, "analytics_refresh"))
         self._title_lbl.setText(S(self.settings, "nav_analytics"))
+        if hasattr(self, "_cycle_start"):
+            self._cycle_lbl.setText(
+                f"{S(self.settings, 'analytics_cycle_label')}: "
+                f"{self._cycle_start} – {self._cycle_end}")
 
     def _apply_btn_style(self):
         ac = c("accent").name()
@@ -3079,6 +3085,7 @@ class HUDWindow(QMainWindow):
         self._nav.set_analytics_visible(show_exp)
         if not show_exp:
             self._analytics_pending = False
+            self._analytics_data = None
             if self._analytics_fetcher:
                 self._analytics_fetcher.blockSignals(True)
                 self._analytics_fetcher.quit()
