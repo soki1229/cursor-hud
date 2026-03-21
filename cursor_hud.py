@@ -3001,6 +3001,8 @@ class HUDWindow(QMainWindow):
         self._refresh_title_btns()
 
     def _switch_tab(self, idx: int):
+        if idx == 3 and not self.settings.get("show_experimental", False):
+            return
         _metrics.inc(f"tab_{idx}")
         self._stack.setCurrentIndex(idx)
         self._nav.set_active(idx)
@@ -3035,6 +3037,7 @@ class HUDWindow(QMainWindow):
             self._analytics_fetcher.quit()
             self._analytics_fetcher.wait(2000)
             self._analytics_fetcher.deleteLater()
+            self._analytics_fetcher = None
         self._pg_analytics.show_loading()
         self._analytics_fetcher = AnalyticsFetcher(
             team_id, start_ms, end_ms, is_ent)
@@ -3076,6 +3079,11 @@ class HUDWindow(QMainWindow):
         self._nav.set_analytics_visible(show_exp)
         if not show_exp:
             self._analytics_pending = False
+            if self._analytics_fetcher:
+                self._analytics_fetcher.blockSignals(True)
+                self._analytics_fetcher.quit()
+                self._analytics_fetcher.deleteLater()
+                self._analytics_fetcher = None
             if self._stack.currentIndex() == 3:
                 self._switch_tab(0)
         if self._last_data:
@@ -3300,7 +3308,6 @@ class HUDWindow(QMainWindow):
         self._update_mini(d)
         # If Analytics tab was opened before first data arrived, fetch now
         if self._analytics_pending:
-            self._analytics_pending = False
             self._trigger_analytics_fetch(force=False)
 
         # Update tray tooltip with credit remaining
