@@ -320,6 +320,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "analytics_model_usage": "모델 사용량",
         "analytics_cycle_label": "청구 주기",
         "analytics_members":    "명",
+        "analytics_events_badge": "{n}건",
     },
     "en": {
         "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
@@ -370,6 +371,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "analytics_model_usage": "Model Usage",
         "analytics_cycle_label": "Billing cycle",
         "analytics_members":    "members",
+        "analytics_events_badge": "{n} events",
     },
 }
 
@@ -652,6 +654,65 @@ def _date_to_ms(date_str: str) -> int:
         return int(dt.timestamp() * 1000)
     except Exception:
         return 0
+
+
+class UsageEventsFetcher(QThread):
+    """Fetch model usage via POST /api/dashboard/get-filtered-usage-events.
+
+    Emits ready(dict) with keys:
+      "model_usage"  : dict  — {model_name: {"count": int, "cost_cents": float}}
+      "total_events" : int   — totalUsageEventsCount from response
+    """
+    ready = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, start_ms: int, end_ms: int):
+        super().__init__()
+        self._start_ms = start_ms
+        self._end_ms   = end_ms
+
+    def run(self):
+        try:
+            cookie, _ = read_cursor_token()
+            if not cookie:
+                self.error.emit("No auth token found.")
+                return
+            hdrs = api_headers(cookie)
+            body = {
+                "startDate": self._start_ms,
+                "endDate":   self._end_ms,
+                "pageSize":  500,
+            }
+            r = requests.post(
+                f"{BASE_URL}/api/dashboard/get-filtered-usage-events",
+                json=body, headers=hdrs, timeout=30,
+            )
+            log.info("UsageEventsFetcher → HTTP %s", r.status_code)
+            if not r.ok:
+                self.error.emit(f"HTTP {r.status_code}: {r.text[:120]}")
+                return
+            data = r.json()
+            events = data.get("usageEventsDisplay", [])
+            total  = data.get("totalUsageEventsCount", len(events))
+            model_agg: dict[str, dict] = {}
+            for event in events:
+                model = event.get("model", "").strip()
+                if not model:
+                    continue
+                cost = (
+                    event.get("chargedCents")
+                    or (event.get("tokenUsage") or {}).get("totalCents", 0)
+                    or 0.0
+                )
+                entry = model_agg.setdefault(model, {"count": 0, "cost_cents": 0.0})
+                entry["count"]      += 1
+                entry["cost_cents"] += float(cost)
+            log.info("UsageEventsFetcher done — %d models, %d events",
+                     len(model_agg), total)
+            self.ready.emit({"model_usage": model_agg, "total_events": total})
+        except Exception:
+            log.exception("UsageEventsFetcher.run")
+            self.error.emit("Request failed — see log for details.")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2254,6 +2315,19 @@ class AnalyticsPage(QWidget):
     def update_data(self, data: dict):
         """Populate model usage section from UsageEventsFetcher ready() payload."""
         self._update_model_usage(data.get("model_usage", {}))
+        self._update_events_badge(data.get("total_events", 0))
+
+    def _update_events_badge(self, total_events: int):
+        """Append total event count to the cycle label."""
+        if not total_events:
+            return
+        lang = self.settings.get("lang", "en")
+        tmpl = STRINGS.get(lang, STRINGS["en"]).get(
+            "analytics_events_badge", "{n} events")
+        badge = tmpl.replace("{n}", str(total_events))
+        existing = self._cycle_lbl.text()
+        if badge not in existing:
+            self._cycle_lbl.setText(f"{existing}  ·  {badge}" if existing else badge)
 
     def _update_model_usage(self, model_agg: dict):
         # Clear previous content
@@ -2714,7 +2788,7 @@ class HUDWindow(QMainWindow):
         self._stack.setAttribute(Qt.WA_TranslucentBackground)
         self._pg_credits  = CreditsPage(self.settings)
         self._pg_credits.retry_clicked.connect(self._fetch)
-        self._analytics_fetcher = None  # replaced by UsageEventsFetcher in next task
+        self._analytics_fetcher: UsageEventsFetcher | None = None
         self._analytics_data: dict | None = None  # None until first successful fetch
         self._analytics_pending: bool = False  # True when tab shown before _on_data fires
         self._pg_profile  = ProfilePage(self.settings)
@@ -2772,15 +2846,12 @@ class HUDWindow(QMainWindow):
             return
         self._analytics_pending = False
         d = self._last_data
-        team_id  = d.get("team_id", "")
         cyc      = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
         end_ms   = _date_to_ms(cyc["end"])
-        is_ent   = d.get("is_enterprise", False)
         self._pg_analytics.set_cycle_label(cyc["start"], cyc["end"])
 
         if not force and self._analytics_data is not None:
-            # Already have successfully-fetched data — don't re-fetch unless forced
             return
         if self._analytics_fetcher:
             self._analytics_fetcher.blockSignals(True)
@@ -2789,11 +2860,10 @@ class HUDWindow(QMainWindow):
             self._analytics_fetcher.deleteLater()
             self._analytics_fetcher = None
         self._pg_analytics.show_loading()
-        # self._analytics_fetcher = AnalyticsFetcher(...)  # replaced by UsageEventsFetcher
-        self._analytics_fetcher = None  # placeholder until Task 4
-        # self._analytics_fetcher.ready.connect(self._on_analytics_data)
-        # self._analytics_fetcher.error.connect(self._on_analytics_error)
-        # self._analytics_fetcher.start()
+        self._analytics_fetcher = UsageEventsFetcher(start_ms, end_ms)
+        self._analytics_fetcher.ready.connect(self._on_analytics_data)
+        self._analytics_fetcher.error.connect(self._on_analytics_error)
+        self._analytics_fetcher.start()
         log.debug("UsageEventsFetcher started")
 
     def _on_analytics_refresh(self):
@@ -2806,8 +2876,8 @@ class HUDWindow(QMainWindow):
         self._analytics_data = data
         self._pg_analytics.update_data(data)
         self._adjust_height(delay_ms=60)
-        log.info("UsageEventsFetcher data received — %d models",
-                 len(data.get("model_usage", {})))
+        log.info("UsageEventsFetcher data received — %d models, %d events",
+                 len(data.get("model_usage", {})), data.get("total_events", 0))
 
     def _on_analytics_error(self, msg: str):
         self._pg_analytics.show_error(msg)
