@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.0.0-beta.9 — 2026-03-23
+
+### Features
+- **Leaderboard tab** (experimental gate): new tab at index 2 (Credits → Analytics → Leaderboard → Profile → Settings).
+  - Tab / Composer sub-toggle: two checkable buttons switch between the two leaderboard views without re-fetching.
+  - Tab leaderboard columns: rank · name · accepts · acceptance ratio (%) · favourite model.
+  - Composer leaderboard columns: rank · name · diff accepts · line acceptance ratio (%) · favourite model.
+  - Members with zero activity rendered at 50 % opacity.
+  - Billing cycle label and member count shown in card header.
+  - Keyboard shortcuts: Ctrl+3 (Leaderboard), Ctrl+4 (Profile), Ctrl+5 (Settings).
+  - Data source: `GET /api/v2/analytics/team/leaderboard` with session token auth.
+- **Analytics tab — JSON API migration**: replaced the CSV streaming pipeline with `POST /api/dashboard/get-filtered-usage-events`; no longer requires a team ID.
+  - `pageSize: 500` retrieves the full billing-cycle event log in a single request.
+  - Cost priority per event: `chargedCents` → `tokenUsage.totalCents` → 0.0 (float accumulation, no truncation).
+  - Card header now shows an event-count badge (e.g. "351 events") alongside the billing cycle label.
+- **CSV export removed**: the CSV export button and its pipeline (`CsvFetcher`, `AnalyticsFetcher`, csv import, QFileDialog) have been deleted. The `csv_team_id` settings field has been removed.
+- **`set_experimental_visible()`** on `NavBar` (renamed from `set_analytics_visible`): hides / shows both Analytics and Leaderboard tabs together; switching off while on either tab redirects to Credits.
+
+### Fixes
+- `_trigger_analytics_fetch` no longer extracts `team_id` / `is_enterprise` from data; `UsageEventsFetcher` takes only `start_ms` / `end_ms`.
+
+---
+
 ## v1.0.0-beta.8 — 2026-03-21
 
 ### Features
