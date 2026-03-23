@@ -1433,7 +1433,6 @@ class DebugDialog(QDialog):
 # ══════════════════════════════════════════════════════════════
 class CreditsPage(QWidget):
     retry_clicked     = pyqtSignal()
-    export_csv_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
         super().__init__()
@@ -1588,35 +1587,6 @@ class CreditsPage(QWidget):
         rl2.addWidget(self._hint_lbl)
         vl.addWidget(self._rate_card)
 
-        # CSV export row — small muted action link at the bottom of the scroll area
-        export_row = QWidget()
-        export_row.setAttribute(Qt.WA_TranslucentBackground)
-        exl = QHBoxLayout(export_row)
-        exl.setContentsMargins(4, 2, 4, 2)
-        exl.setSpacing(0)
-        exl.addStretch()
-        self._csv_btn = QPushButton(self.T("csv_export"))
-        self._csv_btn.setFixedHeight(20)
-        self._csv_btn.setCursor(Qt.PointingHandCursor)
-        self._csv_btn.setStyleSheet(
-            f"QPushButton{{color:{c('t_dim').name()};background:transparent;"
-            f"border:none;font-size:8px;font-family:{_UI_FONT};"
-            f"text-decoration:underline;padding:0 4px;}}"
-            f"QPushButton:hover{{color:{c('t_muted').name()};}}"
-        )
-        self._csv_btn.clicked.connect(self.export_csv_clicked)
-        exl.addWidget(self._csv_btn)
-        self._csv_container = QWidget()
-        self._csv_container.setAttribute(Qt.WA_TranslucentBackground)
-        _ccl = QVBoxLayout(self._csv_container)
-        _ccl.setContentsMargins(0, 0, 0, 0)
-        _ccl.setSpacing(0)
-        _ccl.addWidget(export_row)
-        self._csv_container.setVisible(
-            self.settings.get("show_experimental", False)
-        )
-        vl.addWidget(self._csv_container)
-
     def _rebuild_labels(self):
         update_kv_label(self._row_refs["row_incl"],  self.T("row_incl"))
         update_kv_label(self._row_refs["row_bonus"], self.T("row_bonus"))
@@ -1630,11 +1600,6 @@ class CreditsPage(QWidget):
         set_lbl_color(self._hdr_org,      c("c_green"))
         set_lbl_color(self._hdr_rates,    c("accent2"))
         self._retry_btn.setText(self.T("err_retry"))
-        self._csv_btn.setText(self.T("csv_export"))
-
-    def set_experimental_visible(self, visible: bool) -> None:
-        """Show/hide CSV export controls (gated by Experimental toggle)."""
-        self._csv_container.setVisible(visible)
 
     @staticmethod
     def _bonus_tag_qss() -> str:
@@ -2916,8 +2881,6 @@ class HUDWindow(QMainWindow):
         self._stack.setAttribute(Qt.WA_TranslucentBackground)
         self._pg_credits  = CreditsPage(self.settings)
         self._pg_credits.retry_clicked.connect(self._fetch)
-        self._pg_credits.export_csv_clicked.connect(self._on_export_csv)
-        self._csv_fetcher: CsvFetcher | None = None
         self._analytics_fetcher: AnalyticsFetcher | None = None
         self._analytics_data: dict | None = None  # None until first successful fetch
         self._analytics_pending: bool = False  # True when tab shown before _on_data fires
@@ -3029,7 +2992,6 @@ class HUDWindow(QMainWindow):
         self._pg_credits._org_card.setVisible(cfg.get("show_org", True))
         self._pg_credits._rate_card.setVisible(cfg.get("show_official", True))
         show_exp = cfg.get("show_experimental", False)
-        self._pg_credits.set_experimental_visible(show_exp)
         self._nav.set_analytics_visible(show_exp)
         if not show_exp:
             self._analytics_pending = False
@@ -3151,75 +3113,6 @@ class HUDWindow(QMainWindow):
         self._countdown = max(0, self._countdown - 1)
         self._status.set_countdown(self._countdown)
         self._status.set_clock(datetime.now().strftime("%H:%M:%S"))
-
-    def _on_export_csv(self):
-        """Handle Export CSV button: fetch CSV using current billing cycle dates."""
-        d = self._pg_credits._last_data
-        if not d:
-            QMessageBox.warning(self, "CursorHUD",
-                                S(self.settings, "csv_err_fetch"))
-            return
-        # Settings override takes priority over auto-detected value.
-        # teamId is optional: omitting it returns personal usage data only;
-        # providing a team ID returns all team members' usage.
-        team_id = self.settings.get("csv_team_id", "").strip() or d.get("team_id", "")
-        if team_id:
-            log.info("CSV export — teamId=%s (source=%s)", team_id,
-                     "settings" if self.settings.get("csv_team_id", "").strip() else "auto")
-        else:
-            log.info("CSV export — personal data (no teamId)")
-
-        cyc = d["cycle"]
-        start_ms = _date_to_ms(cyc["start"])
-        end_ms   = _date_to_ms(cyc["end"])
-        is_ent   = d.get("is_enterprise", False)
-
-        # Propose a default file name based on billing cycle
-        default_name = f"cursor_usage_{cyc['start']}_{cyc['end']}.csv"
-        path, _ = QFileDialog.getSaveFileName(
-            self, S(self.settings, "csv_save_title"),
-            str(Path.home() / "Downloads" / default_name),
-            "CSV files (*.csv);;All files (*)",
-        )
-        if not path:
-            return  # user cancelled
-
-        self._pg_credits._csv_btn.setEnabled(False)
-        self._pg_credits._csv_btn.setText("…")
-
-        if self._csv_fetcher:
-            self._csv_fetcher.blockSignals(True)
-            self._csv_fetcher.quit()
-            self._csv_fetcher.wait(2000)
-            self._csv_fetcher.deleteLater()
-
-        self._csv_fetcher = CsvFetcher(team_id, start_ms, end_ms, is_ent)
-        self._csv_fetcher.ready.connect(lambda text, p=path: self._on_csv_ready(text, p))
-        self._csv_fetcher.error.connect(self._on_csv_error)
-        self._csv_fetcher.start()
-        log.info("CsvFetcher started — teamId=%s start=%d end=%d",
-                 team_id or "(personal)", start_ms, end_ms)
-
-    def _on_csv_ready(self, text: str, path: str):
-        self._pg_credits._csv_btn.setEnabled(True)
-        self._pg_credits._csv_btn.setText(S(self.settings, "csv_export"))
-        try:
-            Path(path).write_text(text, encoding="utf-8")
-            log.info("CSV saved → %s (%d bytes)", path, len(text))
-            self._pg_credits._csv_btn.setText(S(self.settings, "csv_saved"))
-            QTimer.singleShot(3000, lambda: self._pg_credits._csv_btn.setText(
-                S(self.settings, "csv_export")))
-        except Exception as exc:
-            log.error("CSV write failed: %s", exc)
-            QMessageBox.critical(self, "CursorHUD",
-                                 f"{S(self.settings, 'csv_err_fetch')}: {exc}")
-
-    def _on_csv_error(self, msg: str):
-        self._pg_credits._csv_btn.setEnabled(True)
-        self._pg_credits._csv_btn.setText(S(self.settings, "csv_export"))
-        log.error("CsvFetcher error: %s", msg)
-        QMessageBox.warning(self, "CursorHUD",
-                            f"{S(self.settings, 'csv_err_fetch')}: {msg}")
 
     def _fetch(self):
         _metrics.inc("fetch")
