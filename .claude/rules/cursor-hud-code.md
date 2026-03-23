@@ -42,4 +42,4 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 ## Settings keys
 
 `lang`, `theme`, `show_personal`, `show_org`, `show_official`, `pin_on_top`,
-`win_x`, `win_y`, `win_w`, `mini_mode`, `csv_team_id`, `show_experimental`.
+`win_x`, `win_y`, `win_w`, `mini_mode`, `show_experimental`.

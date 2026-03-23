@@ -19,7 +19,6 @@ import tempfile
 import base64
 import json
 import math
-import csv as _csv
 import datetime as _dt
 from datetime import datetime, timezone, date as _date
 from pathlib import Path
@@ -30,7 +29,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QMessageBox, QSizePolicy,
     QTextEdit, QDialog, QTabWidget, QSystemTrayIcon, QMenu, QAction,
-    QShortcut, QFileDialog, QLineEdit,
+    QShortcut,
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QPointF, QSize, qInstallMessageHandler
 from PyQt5.QtGui import (
@@ -308,11 +307,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "debug_copy": "복사", "debug_close": "닫기",
         "startup_boot": "부팅 시 자동실행", "pin_top": "항상 위",
         "tray_show": "열기", "tray_refresh": "새로고침", "tray_quit": "종료",
-        "csv_export": "CSV 내보내기", "csv_save_title": "사용 이벤트 CSV 저장",
-        "csv_err_no_team": "팀 ID를 찾을 수 없습니다. 설정에서 직접 입력해 주세요.",
-        "csv_err_fetch": "CSV 다운로드 실패", "csv_saved": "저장 완료",
-        "csv_team_id_label": "팀 ID (CSV 내보내기)",
-        "csv_team_id_placeholder": "선택 사항 — 비워두면 개인 데이터",
         "experimental_section": "실험적 기능",
         "experimental_toggle":  "실험적 기능 활성화",
         "experimental_hint":    "불안정하거나 변경될 수 있는 기능입니다",
@@ -322,7 +316,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "analytics_waiting":    "데이터 대기 중…",
         "analytics_error":      "불러오기 실패",
         "analytics_no_data":    "데이터 없음",
-        "analytics_no_team_id": "팀 ID 없음 — 설정에서 입력하세요",
         "analytics_team_spend": "팀 지출",
         "analytics_model_usage": "모델 사용량",
         "analytics_cycle_label": "청구 주기",
@@ -364,11 +357,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "debug_copy": "Copy", "debug_close": "Close",
         "startup_boot": "Start on Boot", "pin_top": "Always on Top",
         "tray_show": "Show", "tray_refresh": "Refresh", "tray_quit": "Quit",
-        "csv_export": "Export CSV", "csv_save_title": "Save Usage Events CSV",
-        "csv_err_no_team": "Team ID not found. Enter it manually in Settings.",
-        "csv_err_fetch": "CSV download failed", "csv_saved": "Saved",
-        "csv_team_id_label": "Team ID (CSV export)",
-        "csv_team_id_placeholder": "optional — blank = personal data",
         "experimental_section": "Experimental",
         "experimental_toggle":  "Enable experimental features",
         "experimental_hint":    "Features that may change or break",
@@ -378,7 +366,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "analytics_waiting":    "Waiting for data…",
         "analytics_error":      "Failed to load",
         "analytics_no_data":    "No data",
-        "analytics_no_team_id": "No team ID — enter in Settings",
         "analytics_team_spend": "Team Spend",
         "analytics_model_usage": "Model Usage",
         "analytics_cycle_label": "Billing cycle",
@@ -391,7 +378,6 @@ DEFAULT_SETTINGS: dict = {
     "show_personal": True, "show_org": True, "show_official": True,
     "pin_on_top": True,
     "win_x": None, "win_y": None, "win_w": WIN_W, "mini_mode": False,
-    "csv_team_id": "",        # override for CSV export teamId (empty = auto-detect)
     "show_experimental": False,  # gates all Experimental features
 }
 
@@ -1900,22 +1886,6 @@ class SettingsPage(QWidget):
         _edl.setContentsMargins(0, 0, 0, 0)
         _edl.setSpacing(4)
 
-        self._t["csv_team_id_label"] = ql(self.T("csv_team_id_label"), 9, c("t_body"))
-        _edl.addWidget(self._t["csv_team_id_label"])
-
-        self._team_id_input = QLineEdit()
-        self._team_id_input.setFixedHeight(24)
-        self._team_id_input.setPlaceholderText(self.T("csv_team_id_placeholder"))
-        self._team_id_input.setText(self.settings.get("csv_team_id", ""))
-        self._team_id_input.setStyleSheet(
-            f"QLineEdit{{background:{c('bg_card').name()};color:{c('t_body').name()};"
-            f"border:1px solid rgba(128,128,128,0.30);border-radius:4px;"
-            f"padding:0 6px;font-size:9px;font-family:{_UI_FONT};}}"
-            f"QLineEdit:focus{{border:1px solid {c('accent').name()};}}"
-        )
-        self._team_id_input.editingFinished.connect(self._on_team_id_edited)
-        _edl.addWidget(self._team_id_input)
-
         cl.addWidget(self._experimental_detail)
         self._experimental_detail.setVisible(
             self.settings.get("show_experimental", False)
@@ -1969,12 +1939,6 @@ class SettingsPage(QWidget):
 
         return rw, lbl, sw
 
-    def _on_team_id_edited(self):
-        val = self._team_id_input.text().strip()
-        self.settings["csv_team_id"] = val
-        save_settings(self.settings)
-        log.info("csv_team_id set to: %s", val or "(auto-detect)")
-
     def _on_switch(self, key: str, value: bool):
         _metrics.inc(f"toggle_{key}")
         if key == "_startup":
@@ -2021,13 +1985,6 @@ class SettingsPage(QWidget):
             return _linux_autostart_path().exists()
 
     def refresh_theme(self):
-        if hasattr(self, "_team_id_input"):
-            self._team_id_input.setStyleSheet(
-                f"QLineEdit{{background:{c('bg_card').name()};color:{c('t_body').name()};"
-                f"border:1px solid rgba(128,128,128,0.30);border-radius:4px;"
-                f"padding:0 6px;font-size:9px;font-family:{_UI_FONT};}}"
-                f"QLineEdit:focus{{border:1px solid {c('accent').name()};}}"
-            )
         if hasattr(self, "_experimental_detail"):
             self._experimental_detail.setVisible(
                 self.settings.get("show_experimental", False)
@@ -2815,8 +2772,7 @@ class HUDWindow(QMainWindow):
             return
         self._analytics_pending = False
         d = self._last_data
-        team_id  = (self.settings.get("csv_team_id", "").strip()
-                    or d.get("team_id", ""))
+        team_id  = d.get("team_id", "")
         cyc      = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
         end_ms   = _date_to_ms(cyc["end"])
