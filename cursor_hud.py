@@ -2506,6 +2506,279 @@ class AnalyticsPage(QWidget):
 
 
 # ══════════════════════════════════════════════════════════════
+#  PAGE: LEADERBOARD
+# ══════════════════════════════════════════════════════════════
+class LeaderboardPage(QWidget):
+    """Leaderboard tab — Tab completion + Composer ranking.
+
+    Layout:
+      Header row: title + cycle label + refresh button
+      Toggle row: [Tab] [Composer] sub-view selector
+      Content: QStackedWidget — tab_view | composer_view
+    """
+    refresh_clicked = pyqtSignal()
+
+    def __init__(self, settings: dict):
+        super().__init__()
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.settings = settings
+
+        vl = QVBoxLayout(self)
+        vl.setContentsMargins(12, 8, 12, 8)
+        vl.setSpacing(6)
+
+        # ── Main card ──────────────────────────────────────────
+        self._card = Card("accent")
+        cl = QVBoxLayout(self._card)
+        cl.setContentsMargins(10, 8, 10, 10)
+        cl.setSpacing(4)
+
+        # ── Header row ─────────────────────────────────────────
+        hdr_row = QWidget()
+        hdr_row.setAttribute(Qt.WA_TranslucentBackground)
+        hl = QHBoxLayout(hdr_row)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(6)
+        self._hdr_lbl = section_hdr(S(settings, "nav_leaderboard"), "accent")
+        hl.addWidget(self._hdr_lbl, 1)
+        self._cycle_lbl = ql("", 8, c("t_dim"))
+        hl.addWidget(self._cycle_lbl, 0)
+        self._refresh_btn = QPushButton(S(settings, "leaderboard_refresh"))
+        self._refresh_btn.setFixedHeight(20)
+        self._refresh_btn.setCursor(Qt.PointingHandCursor)
+        self._refresh_btn.clicked.connect(self.refresh_clicked)
+        hl.addWidget(self._refresh_btn, 0)
+        cl.addWidget(hdr_row)
+
+        # ── Status label (loading / error / no-data) ───────────
+        self._status_lbl = ql(S(settings, "leaderboard_loading"), 9, c("t_dim"))
+        cl.addWidget(self._status_lbl)
+
+        # ── Content area (hidden until data arrives) ──────────
+        self._content = QWidget()
+        self._content.setAttribute(Qt.WA_TranslucentBackground)
+        content_vl = QVBoxLayout(self._content)
+        content_vl.setContentsMargins(0, 2, 0, 0)
+        content_vl.setSpacing(4)
+
+        # Toggle row
+        toggle_row = QWidget()
+        toggle_row.setAttribute(Qt.WA_TranslucentBackground)
+        tl = QHBoxLayout(toggle_row)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(4)
+        self._tab_btn = QPushButton(S(settings, "leaderboard_tab"))
+        self._tab_btn.setCheckable(True)
+        self._tab_btn.setChecked(True)
+        self._tab_btn.setFixedHeight(22)
+        self._tab_btn.setCursor(Qt.PointingHandCursor)
+        self._composer_btn = QPushButton(S(settings, "leaderboard_composer"))
+        self._composer_btn.setCheckable(True)
+        self._composer_btn.setFixedHeight(22)
+        self._composer_btn.setCursor(Qt.PointingHandCursor)
+        tl.addWidget(self._tab_btn)
+        tl.addWidget(self._composer_btn)
+        tl.addStretch()
+        content_vl.addWidget(toggle_row)
+
+        # Sub-views (stacked)
+        self._sub_stack = QStackedWidget()
+        self._sub_stack.setAttribute(Qt.WA_TranslucentBackground)
+        self._tab_view      = QWidget()
+        self._tab_view.setAttribute(Qt.WA_TranslucentBackground)
+        self._tab_vbox      = QVBoxLayout(self._tab_view)
+        self._tab_vbox.setContentsMargins(0, 0, 0, 0)
+        self._tab_vbox.setSpacing(2)
+        self._composer_view = QWidget()
+        self._composer_view.setAttribute(Qt.WA_TranslucentBackground)
+        self._composer_vbox = QVBoxLayout(self._composer_view)
+        self._composer_vbox.setContentsMargins(0, 0, 0, 0)
+        self._composer_vbox.setSpacing(2)
+        self._sub_stack.addWidget(self._tab_view)       # index 0
+        self._sub_stack.addWidget(self._composer_view)  # index 1
+        content_vl.addWidget(self._sub_stack)
+
+        self._tab_btn.clicked.connect(lambda: self._switch_sub(0))
+        self._composer_btn.clicked.connect(lambda: self._switch_sub(1))
+
+        self._content.hide()
+        cl.addWidget(self._content)
+        vl.addWidget(self._card)
+        vl.addStretch()
+
+        self._apply_styles()
+
+    # ── Sub-view toggle ────────────────────────────────────────
+
+    def _switch_sub(self, idx: int):
+        self._sub_stack.setCurrentIndex(idx)
+        self._tab_btn.setChecked(idx == 0)
+        self._composer_btn.setChecked(idx == 1)
+
+    # ── Public API ─────────────────────────────────────────────
+
+    def show_waiting(self):
+        self._status_lbl.setText(S(self.settings, "leaderboard_waiting"))
+        self._status_lbl.show()
+        self._content.hide()
+        self._cycle_lbl.setText("")
+
+    def show_loading(self):
+        self._status_lbl.setText(S(self.settings, "leaderboard_loading"))
+        self._status_lbl.show()
+        self._content.hide()
+
+    def show_error(self, msg: str):
+        self._status_lbl.setText(
+            f"{S(self.settings, 'leaderboard_error')}: {msg}")
+        self._status_lbl.show()
+        self._content.hide()
+
+    def set_cycle_label(self, start: str, end: str):
+        self._cycle_start = start
+        self._cycle_end   = end
+        n_members = getattr(self, "_total_users", 0)
+        members_str = S(self.settings, "leaderboard_members")
+        badge = f"{n_members} {members_str}  ·  " if n_members else ""
+        self._cycle_lbl.setText(
+            f"{badge}{S(self.settings, 'leaderboard_cycle_label')}: {start} – {end}")
+
+    def update_data(self, data: dict):
+        self._total_users = data.get("total_users", 0)
+        if hasattr(self, "_cycle_start"):
+            self.set_cycle_label(self._cycle_start, self._cycle_end)
+        self._populate_tab(data.get("tab", []))
+        self._populate_composer(data.get("composer", []))
+        if not data.get("tab") and not data.get("composer"):
+            self._status_lbl.setText(S(self.settings, "leaderboard_no_data"))
+            self._status_lbl.show()
+            self._content.hide()
+        else:
+            self._status_lbl.hide()
+            self._content.show()
+
+    # ── Row builders ───────────────────────────────────────────
+
+    def _clear_layout(self, layout: QVBoxLayout):
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _populate_tab(self, entries: list):
+        self._clear_layout(self._tab_vbox)
+        for entry in entries:
+            row = self._make_tab_row(entry)
+            self._tab_vbox.addWidget(row)
+
+    def _populate_composer(self, entries: list):
+        self._clear_layout(self._composer_vbox)
+        for entry in entries:
+            row = self._make_composer_row(entry)
+            self._composer_vbox.addWidget(row)
+
+    def _make_tab_row(self, entry: dict) -> QWidget:
+        zero_activity = entry.get("total_tab_accepts", 0) == 0
+        return self._make_row(
+            rank=entry.get("rank", 0),
+            name=entry.get("display_name", ""),
+            accepts=entry.get("total_tab_accepts", 0),
+            ratio=entry.get("tab_accept_ratio", 0.0),
+            model=entry.get("favorite_model", ""),
+            zero_activity=zero_activity,
+        )
+
+    def _make_composer_row(self, entry: dict) -> QWidget:
+        zero_activity = entry.get("total_diff_accepts", 0) == 0
+        return self._make_row(
+            rank=entry.get("rank", 0),
+            name=entry.get("display_name", ""),
+            accepts=entry.get("total_diff_accepts", 0),
+            ratio=entry.get("composer_line_acceptance_ratio", 0.0),
+            model=entry.get("favorite_model", ""),
+            zero_activity=zero_activity,
+        )
+
+    def _make_row(self, rank: int, name: str, accepts: int,
+                  ratio: float, model: str, zero_activity: bool) -> QWidget:
+        row = QWidget()
+        row.setAttribute(Qt.WA_TranslucentBackground)
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 1, 0, 1)
+        rl.setSpacing(5)
+
+        opacity = 0.5 if zero_activity else 1.0
+
+        def dim(col: QColor) -> QColor:
+            if zero_activity:
+                return QColor(col.red(), col.green(), col.blue(),
+                              int(col.alpha() * opacity))
+            return col
+
+        rank_lbl = ql(f"#{rank}", 8, dim(c("t_dim")))
+        rank_lbl.setFixedWidth(20)
+        rank_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        rl.addWidget(rank_lbl, 0)
+
+        name_lbl = ql(name, 8, dim(c("t_body")))
+        name_lbl.setMaximumWidth(100)
+        rl.addWidget(name_lbl, 1)
+
+        accepts_lbl = ql(str(accepts), 8, dim(c("accent")))
+        accepts_lbl.setFixedWidth(30)
+        accepts_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        rl.addWidget(accepts_lbl, 0)
+
+        pct = min(ratio * 100, 999.9)
+        ratio_lbl = ql(f"{pct:.0f}%", 8, dim(c("t_dim")))
+        ratio_lbl.setFixedWidth(32)
+        ratio_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        rl.addWidget(ratio_lbl, 0)
+
+        model_short = model.split(":")[-1][:18] if model else "—"
+        model_lbl = ql(model_short, 7, dim(c("t_dim")))
+        model_lbl.setMaximumWidth(90)
+        rl.addWidget(model_lbl, 0)
+
+        return row
+
+    # ── Theme / labels ─────────────────────────────────────────
+
+    def refresh_theme(self):
+        self._apply_styles()
+        set_lbl_color(self._cycle_lbl,  c("t_dim"))
+        set_lbl_color(self._status_lbl, c("t_dim"))
+        ac = c("accent").name()
+        self._hdr_lbl.setStyleSheet(
+            f"color:{ac};font-size:8px;font-weight:700;"
+            f"font-family:{_UI_FONT};background:transparent;"
+            "letter-spacing:1.5px;")
+
+    def refresh_labels(self):
+        self._refresh_btn.setText(S(self.settings, "leaderboard_refresh"))
+        self._hdr_lbl.setText(S(self.settings, "nav_leaderboard").upper())
+        self._tab_btn.setText(S(self.settings, "leaderboard_tab"))
+        self._composer_btn.setText(S(self.settings, "leaderboard_composer"))
+        if hasattr(self, "_cycle_start"):
+            self.set_cycle_label(self._cycle_start, self._cycle_end)
+
+    def _apply_styles(self):
+        ac = c("accent").name()
+        mu = c("t_muted").name()
+        btn_qss = (
+            f"QPushButton{{color:{mu};background:rgba(255,255,255,0.05);"
+            f"border:1px solid rgba(255,255,255,0.1);border-radius:3px;"
+            f"font-family:{_UI_FONT};font-size:8px;padding:2px 6px;}}"
+            f"QPushButton:hover{{color:{ac};border-color:{ac};}}"
+            f"QPushButton:checked{{color:{ac};border-color:{ac};"
+            f"background:rgba(255,255,255,0.10);}}"
+        )
+        self._refresh_btn.setStyleSheet(btn_qss)
+        self._tab_btn.setStyleSheet(btn_qss)
+        self._composer_btn.setStyleSheet(btn_qss)
+
+
+# ══════════════════════════════════════════════════════════════
 #  NAV BAR
 # ══════════════════════════════════════════════════════════════
 class NavBar(QWidget):
