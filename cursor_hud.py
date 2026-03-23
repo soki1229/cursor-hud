@@ -3010,6 +3010,7 @@ class HUDWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+2"), self, lambda: self._switch_tab(1))
         QShortcut(QKeySequence("Ctrl+3"), self, lambda: self._switch_tab(2))
         QShortcut(QKeySequence("Ctrl+4"), self, lambda: self._switch_tab(3))
+        QShortcut(QKeySequence("Ctrl+5"), self, lambda: self._switch_tab(4))
 
     def _on_escape(self):
         if self._mini_mode:
@@ -3141,6 +3142,9 @@ class HUDWindow(QMainWindow):
         self._analytics_fetcher: UsageEventsFetcher | None = None
         self._analytics_data: dict | None = None  # None until first successful fetch
         self._analytics_pending: bool = False  # True when tab shown before _on_data fires
+        self._leaderboard_fetcher: LeaderboardFetcher | None = None
+        self._leaderboard_data: dict | None = None
+        self._leaderboard_pending: bool = False
         self._pg_profile  = ProfilePage(self.settings)
         self._pg_settings = SettingsPage(self.settings)
         self._pg_settings.changed.connect(self._on_settings_changed)
@@ -3149,7 +3153,9 @@ class HUDWindow(QMainWindow):
         self._pg_settings.pin_changed.connect(self._on_pin_changed)
         self._pg_analytics = AnalyticsPage(self.settings)
         self._pg_analytics.refresh_clicked.connect(self._on_analytics_refresh)
-        for pg in [self._pg_credits, self._pg_analytics,
+        self._pg_leaderboard = LeaderboardPage(self.settings)
+        self._pg_leaderboard.refresh_clicked.connect(self._on_leaderboard_refresh)
+        for pg in [self._pg_credits, self._pg_analytics, self._pg_leaderboard,
                    self._pg_profile, self._pg_settings]:
             self._stack.addWidget(pg)
         vl.addWidget(self._stack)
@@ -3179,7 +3185,7 @@ class HUDWindow(QMainWindow):
         self._refresh_title_btns()
 
     def _switch_tab(self, idx: int):
-        if idx == 1 and not self.settings.get("show_experimental", False):
+        if idx in (1, 2) and not self.settings.get("show_experimental", False):
             return
         _metrics.inc(f"tab_{idx}")
         self._stack.setCurrentIndex(idx)
@@ -3187,6 +3193,8 @@ class HUDWindow(QMainWindow):
         self._adjust_height(delay_ms=0)
         if idx == 1:
             self._trigger_analytics_fetch(force=False)
+        elif idx == 2:
+            self._trigger_leaderboard_fetch(force=False)
 
     def _trigger_analytics_fetch(self, force: bool = False):
         """Start UsageEventsFetcher. If _last_data not yet available, defer."""
@@ -3233,8 +3241,54 @@ class HUDWindow(QMainWindow):
         self._pg_analytics.show_error(msg)
         log.error("UsageEventsFetcher error: %s", msg)
 
+    def _trigger_leaderboard_fetch(self, force: bool = False):
+        """Start LeaderboardFetcher. Defers if _last_data not yet available."""
+        if self._last_data is None:
+            self._pg_leaderboard.show_waiting()
+            self._leaderboard_pending = True
+            return
+        self._leaderboard_pending = False
+        d = self._last_data
+        cyc      = d["cycle"]
+        start_ms = _date_to_ms(cyc["start"])
+        end_ms   = _date_to_ms(cyc["end"])
+        self._pg_leaderboard.set_cycle_label(cyc["start"], cyc["end"])
+
+        if not force and self._leaderboard_data is not None:
+            return
+        if self._leaderboard_fetcher:
+            self._leaderboard_fetcher.blockSignals(True)
+            self._leaderboard_fetcher.quit()
+            self._leaderboard_fetcher.wait(2000)
+            self._leaderboard_fetcher.deleteLater()
+            self._leaderboard_fetcher = None
+        self._pg_leaderboard.show_loading()
+        self._leaderboard_fetcher = LeaderboardFetcher(start_ms, end_ms)
+        self._leaderboard_fetcher.ready.connect(self._on_leaderboard_data)
+        self._leaderboard_fetcher.error.connect(self._on_leaderboard_error)
+        self._leaderboard_fetcher.start()
+        log.debug("LeaderboardFetcher started")
+
+    def _on_leaderboard_refresh(self):
+        """Force re-fetch triggered by Refresh button."""
+        if self._last_data is None:
+            return
+        self._trigger_leaderboard_fetch(force=True)
+
+    def _on_leaderboard_data(self, data: dict):
+        self._leaderboard_data = data
+        self._pg_leaderboard.update_data(data)
+        self._adjust_height(delay_ms=60)
+        log.info("LeaderboardFetcher data received — %d users",
+                 data.get("total_users", 0))
+
+    def _on_leaderboard_error(self, msg: str):
+        self._pg_leaderboard.show_error(msg)
+        log.error("LeaderboardFetcher error: %s", msg)
+
     def _on_settings_changed(self):
         self._pg_analytics.refresh_labels()
+        self._pg_leaderboard.refresh_labels()
         self._nav.refresh_labels()
         self._status.refresh_labels()
         self._pg_credits._rebuild_labels()
@@ -3244,7 +3298,7 @@ class HUDWindow(QMainWindow):
         self._pg_credits._org_card.setVisible(cfg.get("show_org", True))
         self._pg_credits._rate_card.setVisible(cfg.get("show_official", True))
         show_exp = cfg.get("show_experimental", False)
-        self._nav.set_analytics_visible(show_exp)
+        self._nav.set_experimental_visible(show_exp)
         if not show_exp:
             self._analytics_pending = False
             self._analytics_data = None
@@ -3254,7 +3308,15 @@ class HUDWindow(QMainWindow):
                 self._analytics_fetcher.wait(2000)
                 self._analytics_fetcher.deleteLater()
                 self._analytics_fetcher = None
-            if self._stack.currentIndex() == 1:
+            self._leaderboard_pending = False
+            self._leaderboard_data = None
+            if self._leaderboard_fetcher:
+                self._leaderboard_fetcher.blockSignals(True)
+                self._leaderboard_fetcher.quit()
+                self._leaderboard_fetcher.wait(2000)
+                self._leaderboard_fetcher.deleteLater()
+                self._leaderboard_fetcher = None
+            if self._stack.currentIndex() in (1, 2):
                 self._switch_tab(0)
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
@@ -3277,6 +3339,7 @@ class HUDWindow(QMainWindow):
         self._pg_profile.refresh_theme()
         self._pg_settings.refresh_theme()
         self._pg_analytics.refresh_theme()
+        self._pg_leaderboard.refresh_theme()
         self.update()
         self.repaint()
         if self._last_data:
@@ -3418,6 +3481,8 @@ class HUDWindow(QMainWindow):
         # If Analytics tab was opened before first data arrived, fetch now
         if self._analytics_pending:
             self._trigger_analytics_fetch(force=False)
+        if self._leaderboard_pending:
+            self._trigger_leaderboard_fetch(force=False)
 
         # Update tray tooltip with credit remaining
         if self._tray:
