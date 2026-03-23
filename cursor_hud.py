@@ -2783,8 +2783,9 @@ class LeaderboardPage(QWidget):
 # ══════════════════════════════════════════════════════════════
 class NavBar(QWidget):
     tab_clicked = pyqtSignal(int)
-    TABS = ["nav_credit", "nav_analytics", "nav_profile", "nav_settings"]
-    ANALYTICS_IDX = 1
+    TABS = ["nav_credit", "nav_analytics", "nav_leaderboard", "nav_profile", "nav_settings"]
+    ANALYTICS_IDX    = 1
+    LEADERBOARD_IDX  = 2
 
     def __init__(self, settings: dict):
         super().__init__()
@@ -2804,9 +2805,10 @@ class NavBar(QWidget):
             btn.clicked.connect(lambda _, idx=i: self.tab_clicked.emit(idx))
             self._btns.append(btn)
             hl.addWidget(btn, 1)
-        # Analytics tab hidden by default (experimental)
-        self._btns[self.ANALYTICS_IDX].setVisible(
-            settings.get("show_experimental", False))
+        # Experimental tabs hidden by default
+        _show_exp = settings.get("show_experimental", False)
+        self._btns[self.ANALYTICS_IDX].setVisible(_show_exp)
+        self._btns[self.LEADERBOARD_IDX].setVisible(_show_exp)
 
     def _apply_style(self, btn):
         ac = c("accent").name()
@@ -2824,8 +2826,9 @@ class NavBar(QWidget):
         for i, btn in enumerate(self._btns):
             btn.setChecked(i == idx)
 
-    def set_analytics_visible(self, visible: bool):
+    def set_experimental_visible(self, visible: bool):
         self._btns[self.ANALYTICS_IDX].setVisible(visible)
+        self._btns[self.LEADERBOARD_IDX].setVisible(visible)
 
     def refresh_labels(self):
         for i, key in enumerate(self.TABS):
