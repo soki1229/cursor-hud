@@ -2276,7 +2276,7 @@ class AnalyticsPage(QWidget):
         self._cycle_lbl.setText("")
 
     def show_loading(self):
-        """Show loading state while AnalyticsFetcher is running."""
+        """Show loading state while UsageEventsFetcher is running."""
         self._model_status.setText(S(self.settings, "analytics_loading"))
         self._model_status.show()
         self._model_container.hide()
@@ -2295,7 +2295,7 @@ class AnalyticsPage(QWidget):
             f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}")
 
     def update_data(self, data: dict):
-        """Populate model usage section from AnalyticsFetcher ready() payload."""
+        """Populate model usage section from UsageEventsFetcher ready() payload."""
         self._update_model_usage(data.get("model_usage", {}))
 
     def _update_model_usage(self, model_agg: dict):
@@ -2757,7 +2757,7 @@ class HUDWindow(QMainWindow):
         self._stack.setAttribute(Qt.WA_TranslucentBackground)
         self._pg_credits  = CreditsPage(self.settings)
         self._pg_credits.retry_clicked.connect(self._fetch)
-        self._analytics_fetcher: AnalyticsFetcher | None = None
+        self._analytics_fetcher = None  # replaced by UsageEventsFetcher in next task
         self._analytics_data: dict | None = None  # None until first successful fetch
         self._analytics_pending: bool = False  # True when tab shown before _on_data fires
         self._pg_profile  = ProfilePage(self.settings)
@@ -2808,7 +2808,7 @@ class HUDWindow(QMainWindow):
             self._trigger_analytics_fetch(force=False)
 
     def _trigger_analytics_fetch(self, force: bool = False):
-        """Start AnalyticsFetcher. If _last_data not yet available, defer."""
+        """Start UsageEventsFetcher. If _last_data not yet available, defer."""
         if self._last_data is None:
             self._pg_analytics.show_waiting()
             self._analytics_pending = True
@@ -2833,12 +2833,12 @@ class HUDWindow(QMainWindow):
             self._analytics_fetcher.deleteLater()
             self._analytics_fetcher = None
         self._pg_analytics.show_loading()
-        self._analytics_fetcher = AnalyticsFetcher(
-            team_id, start_ms, end_ms, is_ent)
-        self._analytics_fetcher.ready.connect(self._on_analytics_data)
-        self._analytics_fetcher.error.connect(self._on_analytics_error)
-        self._analytics_fetcher.start()
-        log.debug("AnalyticsFetcher started")
+        # self._analytics_fetcher = AnalyticsFetcher(...)  # replaced by UsageEventsFetcher
+        self._analytics_fetcher = None  # placeholder until Task 4
+        # self._analytics_fetcher.ready.connect(self._on_analytics_data)
+        # self._analytics_fetcher.error.connect(self._on_analytics_error)
+        # self._analytics_fetcher.start()
+        log.debug("UsageEventsFetcher started")
 
     def _on_analytics_refresh(self):
         """Force re-fetch triggered by Refresh button."""
@@ -2850,12 +2850,12 @@ class HUDWindow(QMainWindow):
         self._analytics_data = data
         self._pg_analytics.update_data(data)
         self._adjust_height(delay_ms=60)
-        log.info("AnalyticsFetcher data received — %d models",
+        log.info("UsageEventsFetcher data received — %d models",
                  len(data.get("model_usage", {})))
 
     def _on_analytics_error(self, msg: str):
         self._pg_analytics.show_error(msg)
-        log.error("AnalyticsFetcher error: %s", msg)
+        log.error("UsageEventsFetcher error: %s", msg)
 
     def _on_settings_changed(self):
         self._pg_analytics.refresh_labels()
