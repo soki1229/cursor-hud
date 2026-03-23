@@ -321,6 +321,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "analytics_cycle_label": "청구 주기",
         "analytics_members":    "명",
         "analytics_events_badge": "{n}건",
+        "nav_leaderboard":        "리더보드",
+        "leaderboard_refresh":    "새로고침",
+        "leaderboard_loading":    "불러오는 중…",
+        "leaderboard_waiting":    "데이터 대기 중…",
+        "leaderboard_error":      "불러오기 실패",
+        "leaderboard_no_data":    "데이터 없음",
+        "leaderboard_tab":        "탭",
+        "leaderboard_composer":   "컴포저",
+        "leaderboard_members":    "명",
+        "leaderboard_cycle_label":"청구 주기",
     },
     "en": {
         "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
@@ -372,6 +382,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "analytics_cycle_label": "Billing cycle",
         "analytics_members":    "members",
         "analytics_events_badge": "{n} events",
+        "nav_leaderboard":        "Leaderboard",
+        "leaderboard_refresh":    "Refresh",
+        "leaderboard_loading":    "Loading…",
+        "leaderboard_waiting":    "Waiting for data…",
+        "leaderboard_error":      "Failed to load",
+        "leaderboard_no_data":    "No data",
+        "leaderboard_tab":        "Tab",
+        "leaderboard_composer":   "Composer",
+        "leaderboard_members":    "members",
+        "leaderboard_cycle_label":"Billing cycle",
     },
 }
 
@@ -712,6 +732,60 @@ class UsageEventsFetcher(QThread):
             self.ready.emit({"model_usage": model_agg, "total_events": total})
         except Exception:
             log.exception("UsageEventsFetcher.run")
+            self.error.emit("Request failed — see log for details.")
+
+
+class LeaderboardFetcher(QThread):
+    """Fetch team leaderboard via GET /api/v2/analytics/team/leaderboard.
+
+    Emits ready(dict) with keys:
+      "tab"         : list[dict]  — tab_leaderboard entries sorted by rank
+      "composer"    : list[dict]  — composer_leaderboard entries sorted by rank
+      "total_users" : int
+    """
+    ready = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, start_ms: int, end_ms: int):
+        super().__init__()
+        self._start_ms = start_ms
+        self._end_ms   = end_ms
+
+    def run(self):
+        try:
+            cookie, _ = read_cursor_token()
+            if not cookie:
+                self.error.emit("No auth token found.")
+                return
+            hdrs = api_headers(cookie)
+            body = {"startDate": self._start_ms, "endDate": self._end_ms}
+            r = requests.get(
+                f"{BASE_URL}/api/v2/analytics/team/leaderboard",
+                json=body, headers=hdrs, timeout=30,
+            )
+            log.info("LeaderboardFetcher → HTTP %s", r.status_code)
+            if not r.ok:
+                self.error.emit(f"HTTP {r.status_code}: {r.text[:120]}")
+                return
+            data = r.json()
+            tab_block      = data.get("tab_leaderboard", {})
+            composer_block = data.get("composer_leaderboard", {})
+            tab_entries      = sorted(tab_block.get("data", []),
+                                      key=lambda x: x.get("rank", 999))
+            composer_entries = sorted(composer_block.get("data", []),
+                                      key=lambda x: x.get("rank", 999))
+            total_users = max(
+                tab_block.get("total_users", 0),
+                composer_block.get("total_users", 0),
+            )
+            log.info("LeaderboardFetcher done — %d users", total_users)
+            self.ready.emit({
+                "tab":         tab_entries,
+                "composer":    composer_entries,
+                "total_users": total_users,
+            })
+        except Exception:
+            log.exception("LeaderboardFetcher.run")
             self.error.emit("Request failed — see log for details.")
 
 
