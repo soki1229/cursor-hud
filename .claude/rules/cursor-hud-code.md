@@ -18,18 +18,20 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 | `I18N`               | `STRINGS` (ko/en), `DEFAULT_SETTINGS`, `load_settings()`, `S()`         |
 | `TOKEN / DB`         | `_cursor_db_path()`, `decode_jwt()`, `read_cursor_token()`, `api_headers()` |
 | `DATA FETCHER`       | `DataFetcher(QThread)` — calls `/api/usage-summary` + `/api/auth/me`     |
+| `CSV FETCHER`        | `_date_to_ms()`, `UsageEventsFetcher(QThread)`, `LeaderboardFetcher(QThread)` |
 | `DATA MODEL`         | `parse_data()`, `_safe_int()`, `_safe_float()`                           |
 | `UI HELPERS`         | `usd()`, `fmt_date()`, `days_left_text()`, `pct_color()`, `remain_color()` |
 | `HATCH HELPER`       | `_get_hatch_pixmap()`, `_draw_hatch()`                                   |
 | `PRIMITIVE WIDGETS`  | `ArcGauge`, `SegBar`, `MiniBar`, `PieChart`, `Card`, `Divider`, `ToggleSwitch` |
 | `KV-ROW FACTORY`     | `kv_row()`, `set_kv()`, `section_hdr()`, `KVRow`                        |
 | `DEBUG DIALOG`       | `DebugDialog` — Logs / JSON / Metrics tabs                               |
-| `PAGE: CREDITS`      | `CreditsPage` — hero card, arc gauge, seg bars, OD display, `set_experimental_visible()` |
+| `PAGE: CREDITS`      | `CreditsPage` — hero card, arc gauge, seg bars, OD display |
 | `PAGE: PROFILE`      | `ProfilePage` — account info                                             |
 | `PAGE: SETTINGS`     | `SettingsPage` — lang, theme, toggles, startup reg                        |
 | `PAGE: ANALYTICS`    | `AnalyticsPage` — Model Usage donut chart + legend; `refresh_clicked` signal |
+| `PAGE: LEADERBOARD`  | `LeaderboardPage` — Tab / Composer sub-toggle; `refresh_clicked` signal |
 | `STATUS BAR`         | `StatusBar` — countdown, log button                                       |
-| `NAV BAR`            | `NavBar` — Credits / Analytics / Profile / Settings tabs; `ANALYTICS_IDX=1` |
+| `NAV BAR`            | `NavBar` — Credits / Analytics / Leaderboard / Profile / Settings tabs; `ANALYTICS_IDX=1`, `LEADERBOARD_IDX=2`; `set_experimental_visible()` |
 | `MAIN WINDOW`        | `HUDWindow` — drag, tray, shortcuts, data flow                           |
 | `PLATFORM HELPERS`   | `enable_dpi()`, `register_startup()`, `unregister_startup()`, `_macos_launchagent_path()`, `_linux_autostart_path()` — cross-platform (win32/darwin/linux) |
 | `ENTRY POINT`        | `main()` — `--mock`, `--install-startup`, `--uninstall-startup`           |
