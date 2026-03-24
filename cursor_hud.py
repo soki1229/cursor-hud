@@ -34,7 +34,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QPointF, QSize, qInstallMessageHandler
 from PyQt5.QtGui import (
     QColor, QPainter, QBrush, QPen, QPainterPath, QPixmap, QIcon,
-    QLinearGradient, QRadialGradient, QFont, QScreen, QKeySequence,
+    QLinearGradient, QRadialGradient, QFont, QFontDatabase, QScreen, QKeySequence,
 )
 
 # ══════════════════════════════════════════════════════════════
