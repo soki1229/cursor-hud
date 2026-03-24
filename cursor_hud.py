@@ -281,7 +281,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.10"
+VERSION   = "1.0.0"
 BASE_URL  = "https://cursor.com"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
