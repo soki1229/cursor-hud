@@ -12,7 +12,7 @@ Grep for the banner text (`# ══.*<TEXT>`) to jump to each section.
 | `EXE-SAFE PATHS`     | `_app_dir()`, `APP_DIR`, `SETTINGS_FILE`, `LOG_FILE`                     |
 | `LOGGING`            | `_MemHandler` (300-record ring buffer)                                   |
 | `USAGE METRICS`      | `_UsageMetrics` — local-only counters, never sent                        |
-| `THEME SYSTEM`       | `THEMES`, `c()`, `apply_theme()`, `TH()`, `track_bg()`                  |
+| `THEME SYSTEM`       | `THEMES`, `c()`, `apply_theme()`, `TH()`, `track_bg()`, `_OS_DEFAULT_FONT`, `_UI_FONT`, `_loaded_fonts`, `_load_bundled_fonts()` |
 | `QSS HELPERS`        | `_icon_btn_qss()`, `_pill_btn_qss()`, `_theme_btn_qss()`                |
 | `CONSTANTS`          | `VERSION`, `BASE_URL`, `WIN_W`, `WIN_H`, `REFRESH_MS`                   |
 | `I18N`               | `STRINGS` (ko/en), `DEFAULT_SETTINGS`, `load_settings()`, `S()`         |
