@@ -112,6 +112,7 @@ _metrics = _UsageMetrics()
 THEMES: dict[str, dict] = {
     "dark": {
         "name": "dark",
+        "font": "Space Grotesk",
         "bg_win": (10, 12, 24), "bg_win2": (5, 7, 16), "bg_card": (13, 16, 28),
         "accent": (0, 220, 255), "accent2": (130, 80, 255),
         "c_green": (0, 240, 140), "c_amber": (255, 185, 50), "c_red": (255, 70, 90),
@@ -123,6 +124,7 @@ THEMES: dict[str, dict] = {
     },
     "light": {
         "name": "light",
+        "font": "Nunito",
         "bg_win": (240, 244, 255), "bg_win2": (225, 232, 248), "bg_card": (255, 255, 255),
         "accent": (0, 145, 200), "accent2": (100, 55, 210),
         "c_green": (0, 170, 90), "c_amber": (200, 130, 0), "c_red": (210, 40, 60),
@@ -134,6 +136,7 @@ THEMES: dict[str, dict] = {
     },
     "midnight": {
         "name": "midnight",
+        "font": "Raleway",
         "bg_win": (6, 4, 18), "bg_win2": (2, 1, 9), "bg_card": (12, 8, 28),
         "accent": (160, 80, 255), "accent2": (255, 60, 160),
         "c_green": (0, 220, 120), "c_amber": (255, 160, 40), "c_red": (255, 50, 80),
@@ -145,6 +148,7 @@ THEMES: dict[str, dict] = {
     },
     "matrix": {
         "name": "matrix",
+        "font": "Fira Code",
         "bg_win": (0, 8, 0), "bg_win2": (0, 4, 0), "bg_card": (0, 14, 0),
         "accent": (0, 255, 70), "accent2": (0, 200, 50),
         "c_green": (0, 255, 70), "c_amber": (180, 255, 0), "c_red": (255, 100, 0),
@@ -153,6 +157,27 @@ THEMES: dict[str, dict] = {
         "border_lo": (0, 255, 70, 16), "border_hi": (0, 255, 70, 50),
         "scrollbar": "rgba(0,255,70,0.25)", "hatch_alpha": 30,
         "track_bg": (0, 255, 70, 22),
+    },
+    "native": {
+        "name": "native",
+        "font": "Inter",
+        "bg_win":    (10, 10, 10),
+        "bg_win2":   (4,  4,  4),
+        "bg_card":   (20, 20, 20),
+        "accent":    (220, 220, 225),
+        "accent2":   (155, 155, 165),
+        "c_green":   (0, 195, 105),
+        "c_amber":   (215, 155, 40),
+        "c_red":     (215, 58, 72),
+        "t_bright":  (237, 237, 237),
+        "t_body":    (148, 148, 155),
+        "t_muted":   (78, 78, 84),
+        "t_dim":     (38, 38, 44),
+        "border_lo": (255, 255, 255, 11),
+        "border_hi": (220, 220, 225, 38),
+        "scrollbar": "rgba(255,255,255,0.11)",
+        "hatch_alpha": 20,
+        "track_bg":  (255, 255, 255, 16),
     },
 }
 
@@ -316,6 +341,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "settings_title": "설정", "lang_label": "언어", "theme_label": "테마",
         "theme_dark": "다크", "theme_light": "라이트",
         "theme_midnight": "미드나잇", "theme_matrix": "매트릭스",
+        "theme_native": "네이티브",
         "show_sections": "표시 항목",
         "show_personal": "개인 크레딧", "show_org": "조직 크레딧", "show_official": "공식 사용률",
         "auto_saved": "자동 저장됨", "refresh_btn": "↻",
@@ -376,6 +402,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "settings_title": "Settings", "lang_label": "Language", "theme_label": "Theme",
         "theme_dark": "Dark", "theme_light": "Light",
         "theme_midnight": "Midnight", "theme_matrix": "Matrix",
+        "theme_native": "Native",
         "show_sections": "Visible Sections",
         "show_personal": "Personal Credits", "show_org": "Organization Credits",
         "show_official": "Usage Rates",
@@ -1904,8 +1931,11 @@ class SettingsPage(QWidget):
     TOGGLES_PIN  = [("pin_on_top", "pin_top")]
     STARTUP_KEY  = "startup_boot"
     THEMES_ORDER = [
-        ("light", "theme_light"), ("dark", "theme_dark"),
-        ("midnight", "theme_midnight"), ("matrix", "theme_matrix"),
+        ("light",    "theme_light"),
+        ("dark",     "theme_dark"),
+        ("midnight", "theme_midnight"),
+        ("matrix",   "theme_matrix"),
+        ("native",   "theme_native"),
     ]
 
     def __init__(self, settings: dict):
@@ -1986,7 +2016,7 @@ class SettingsPage(QWidget):
             btn.setFixedHeight(28)
             btn.setStyleSheet(_theme_btn_qss(THEMES[tname]))
             btn.clicked.connect(lambda _, tn=tname: self._set_theme(tn))
-            rls[0 if i < 2 else 1].addWidget(btn, 1)
+            rls[0 if i < 3 else 1].addWidget(btn, 1)
             self._t[f"theme_{tname}"] = btn
         for r in rows:
             cl.addWidget(r)
