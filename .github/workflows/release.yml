@@ -22,7 +22,7 @@ jobs:
         run: pip install pyinstaller pyqt5 requests
 
       - name: Build EXE
-        run: python -m PyInstaller --onefile --windowed --name CursorHUD --icon=assets/icon.ico cursor_hud.py
+        run: python -m PyInstaller --onefile --windowed --name CursorHUD --icon=assets/icon.ico --add-data "assets/icon.ico;assets" cursor_hud.py
 
       - uses: actions/upload-artifact@v4
         with:

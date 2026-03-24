@@ -233,7 +233,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0-beta.9"
+VERSION   = "1.0.0-beta.10"
 BASE_URL  = "https://cursor.com"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
@@ -3914,9 +3914,11 @@ def main():
         except Exception:
             pass
     if getattr(sys, "frozen", False):
+        _base = Path(getattr(sys, "_MEIPASS", ""))
         if sys.platform == "win32":
-            # Load icon from the EXE's embedded resource (set by PyInstaller --icon)
-            app.setWindowIcon(QIcon(sys.executable))
+            _icon_p = _base / "assets" / "icon.ico"
+            if _icon_p.exists():
+                app.setWindowIcon(QIcon(str(_icon_p)))
     else:
         if sys.platform == "win32":
             _icon_p = _app_dir() / "assets" / "icon.ico"
