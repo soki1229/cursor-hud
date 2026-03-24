@@ -1696,6 +1696,7 @@ class CreditsPage(QWidget):
         sec_px = max(7, int(8 * scale))
         for hdr in [self._hdr_personal, self._hdr_org, self._hdr_rates]:
             f = hdr.font()
+            f.setFamily(_UI_FONT)
             f.setPointSize(sec_px)
             hdr.setFont(f)
         if arc_size is None:
@@ -3395,6 +3396,7 @@ class HUDWindow(QMainWindow):
         self._pg_leaderboard.refresh_theme()
         self.update()
         self.repaint()
+        self._apply_scale()   # re-apply QFont objects with updated _UI_FONT
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
             self._pg_profile.update_data(self._last_data)
@@ -3745,10 +3747,12 @@ class HUDWindow(QMainWindow):
             for label_lbl, amount_lbl in self._mini_groups:
                 if amount_lbl is not None:
                     f = amount_lbl.font()
+                    f.setFamily(_UI_FONT)
                     f.setPointSize(mini_px)
                     amount_lbl.setFont(f)
                 if label_lbl is not None:
                     f2 = label_lbl.font()
+                    f2.setFamily(_UI_FONT)
                     f2.setPointSize(hdr_px)
                     label_lbl.setFont(f2)
 
