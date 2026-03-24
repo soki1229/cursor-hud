@@ -174,8 +174,13 @@ def c(key: str) -> QColor:
 
 
 def apply_theme(name: str):
-    global _THEME
+    global _THEME, _UI_FONT
     _THEME = THEMES.get(name, THEMES["light"])
+    font_name = _THEME.get("font")
+    if font_name and font_name in _loaded_fonts:
+        _UI_FONT = font_name
+    else:
+        _UI_FONT = _OS_DEFAULT_FONT
 
 
 def hatch_alpha() -> int:
@@ -185,6 +190,24 @@ def hatch_alpha() -> int:
 def track_bg() -> QColor:
     v = _THEME.get("track_bg", (255, 255, 255, 28))
     return QColor(v[0], v[1], v[2], v[3])
+
+
+# ── Bundled font loader ──────────────────────────────────────
+_loaded_fonts: set[str] = set()
+
+def _load_bundled_fonts(base: Path) -> None:
+    """Load all .ttf files from assets/fonts/ and register with Qt.
+    Must be called after QApplication is created (QFontDatabase requires it).
+    """
+    fonts_dir = base / "assets" / "fonts"
+    if not fonts_dir.exists():
+        return
+    for ttf in sorted(fonts_dir.glob("*.ttf")):
+        fid = QFontDatabase.addApplicationFont(str(ttf))
+        if fid != -1:
+            families = QFontDatabase.applicationFontFamilies(fid)
+            _loaded_fonts.update(families)
+            log.debug("Font loaded: %s → %s", ttf.name, families)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -238,13 +261,13 @@ BASE_URL  = "https://cursor.com"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
 if sys.platform == "win32":
-    _UI_FONT   = "Segoe UI"
+    _OS_DEFAULT_FONT = _UI_FONT = "Segoe UI"
     _MONO_FONT = "Consolas"
 elif sys.platform == "darwin":
-    _UI_FONT   = "Helvetica Neue"
+    _OS_DEFAULT_FONT = _UI_FONT = "Helvetica Neue"
     _MONO_FONT = "Menlo"
 else:
-    _UI_FONT   = "DejaVu Sans"
+    _OS_DEFAULT_FONT = _UI_FONT = "DejaVu Sans"
     _MONO_FONT = "DejaVu Sans Mono"
 WIN_W     = 400
 WIN_W_MAX = 500
