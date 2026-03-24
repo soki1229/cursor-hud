@@ -198,6 +198,8 @@ def c(key: str) -> QColor:
     return QColor(*v) if len(v) == 3 else QColor(v[0], v[1], v[2], v[3])
 
 
+_loaded_fonts: set[str] = set()
+
 def apply_theme(name: str):
     global _THEME, _UI_FONT
     _THEME = THEMES.get(name, THEMES["light"])
@@ -218,8 +220,6 @@ def track_bg() -> QColor:
 
 
 # ── Bundled font loader ──────────────────────────────────────
-_loaded_fonts: set[str] = set()
-
 def _load_bundled_fonts(base: Path) -> None:
     """Load all .ttf files from assets/fonts/ and register with Qt.
     Must be called after QApplication is created (QFontDatabase requires it).
@@ -1898,6 +1898,13 @@ class ProfilePage(QWidget):
 
     def refresh_theme(self):
         self._rebuild_labels()
+        for lw, vw in self._rows.values():
+            f = vw.font()
+            f.setFamily(_UI_FONT)
+            vw.setFont(f)
+            f2 = lw.font()
+            f2.setFamily(_UI_FONT)
+            lw.setFont(f2)
 
     def update_data(self, d: dict):
         pr = d["profile"]
