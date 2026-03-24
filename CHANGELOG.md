@@ -4,11 +4,11 @@
 
 ### Features
 - **Per-theme typography**: each theme now has its own bundled font, shipped as OFL-licensed TTF files in `assets/fonts/`.
-  - Light → **Nunito** (둥글고 친근한 산세리프)
-  - Dark → **Space Grotesk** (기하학적, 테크 느낌)
-  - Midnight → **Raleway** (얇고 우아한 드라마틱 산세리프)
-  - Matrix → **Fira Code** (고정폭 터미널 감성)
-  - Native → **Inter** (정밀·미니멀, Cursor 웹 자체 폰트)
+  - Light → **Nunito** (rounded, friendly sans-serif)
+  - Dark → **Space Grotesk** (geometric, tech-forward)
+  - Midnight → **Raleway** (elegant, dramatic thin sans-serif)
+  - Matrix → **Fira Code** (monospaced, terminal aesthetic)
+  - Native → **Inter** (precise, minimal — Cursor's own web font)
 - **Native theme**: new `native` theme inspired by `cursor.com/settings` — near-black background (`#0A0A0A`), cool-grey accent palette, zero-saturation color scheme.
 - Font loading via `QFontDatabase` at startup; graceful OS-default fallback if `assets/fonts/` is absent (e.g. custom builds).
 - All 3 platform CI builds (`release.yml`) now bundle the fonts directory via PyInstaller `--add-data`.
@@ -78,7 +78,7 @@
 - CSV column guard corrected from `< 12` to `< 11` (actual column count);
   previously caused all CSV rows to be silently skipped, resulting in empty
   Model Usage display.
-- Language buttons now correctly i18n'd: Korean UI shows "한국어" / "영어";
+- Language buttons now correctly i18n'd: Korean UI shows "Korean" / "English" in Korean;
   English UI shows "Korean" / "English".
 
 ---
