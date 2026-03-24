@@ -3985,6 +3985,15 @@ def main():
             app.setWindowIcon(QIcon(str(_icon_p)))
 
     init_settings = load_settings()
+
+    # Load bundled fonts before apply_theme so _UI_FONT can be set correctly.
+    # frozen: fonts extracted to sys._MEIPASS by PyInstaller --add-data
+    # dev:    fonts at assets/fonts/ relative to source tree
+    if getattr(sys, "frozen", False):
+        _load_bundled_fonts(Path(sys._MEIPASS))
+    else:
+        _load_bundled_fonts(_app_dir())
+
     apply_theme(init_settings.get("theme", "light"))
     app.setStyleSheet(
         "QScrollBar:vertical{background:transparent;width:4px;margin:0;}"
