@@ -2680,8 +2680,6 @@ class AnalyticsPage(QWidget):
       section_hdr("MODEL USAGE") + model rows with progress bars
     """
 
-    refresh_clicked = pyqtSignal()
-
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -2707,11 +2705,6 @@ class AnalyticsPage(QWidget):
         hl.addWidget(self._hdr_model, 1)
         self._cycle_lbl = ql("", 8, c("t_dim"))
         hl.addWidget(self._cycle_lbl, 0)
-        self._refresh_btn = QPushButton(S(settings, "analytics_refresh"))
-        self._refresh_btn.setFixedHeight(20)
-        self._refresh_btn.setCursor(Qt.PointingHandCursor)
-        self._refresh_btn.clicked.connect(self.refresh_clicked)
-        hl.addWidget(self._refresh_btn, 0)
         mcl.addWidget(hdr_row)
 
         self._model_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
@@ -2727,8 +2720,6 @@ class AnalyticsPage(QWidget):
 
         vl.addWidget(self._model_card)
         vl.addStretch()
-
-        self._apply_btn_style()
 
     # ── Public API ────────────────────────────────────────────
 
@@ -2852,7 +2843,6 @@ class AnalyticsPage(QWidget):
         self._model_container.show()
 
     def refresh_theme(self):
-        self._apply_btn_style()
         set_lbl_color(self._cycle_lbl, c("t_dim"))
         set_lbl_color(self._model_status, c("t_dim"))
         self._hdr_model.setStyleSheet(
@@ -2860,23 +2850,12 @@ class AnalyticsPage(QWidget):
         )
 
     def refresh_labels(self):
-        self._refresh_btn.setText(S(self.settings, "analytics_refresh"))
         self._hdr_model.setText(S(self.settings, "analytics_model_usage").upper())
         if hasattr(self, "_cycle_start"):
             self._cycle_lbl.setText(
                 f"{S(self.settings, 'analytics_cycle_label')}: "
                 f"{self._cycle_start} – {self._cycle_end}"
             )
-
-    def _apply_btn_style(self):
-        ac = c("accent").name()
-        mu = c("t_muted").name()
-        self._refresh_btn.setStyleSheet(
-            f"QPushButton{{color:{mu};background:rgba(255,255,255,0.05);"
-            f"border:1px solid rgba(255,255,255,0.1);border-radius:3px;"
-            f"font-family:{_UI_FONT};font-size:8px;padding:2px 6px;}}"
-            f"QPushButton:hover{{color:{ac};border-color:{ac};}}"
-        )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2890,8 +2869,6 @@ class LeaderboardPage(QWidget):
       Toggle row: [Tab] [Composer] sub-view selector
       Content: QStackedWidget — tab_view | composer_view
     """
-
-    refresh_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
         super().__init__()
@@ -2918,11 +2895,6 @@ class LeaderboardPage(QWidget):
         hl.addWidget(self._hdr_lbl, 1)
         self._cycle_lbl = ql("", 8, c("t_dim"))
         hl.addWidget(self._cycle_lbl, 0)
-        self._refresh_btn = QPushButton(S(settings, "leaderboard_refresh"))
-        self._refresh_btn.setFixedHeight(20)
-        self._refresh_btn.setCursor(Qt.PointingHandCursor)
-        self._refresh_btn.clicked.connect(self.refresh_clicked)
-        hl.addWidget(self._refresh_btn, 0)
         cl.addWidget(hdr_row)
 
         # ── Status label (loading / error / no-data) ───────────
@@ -3139,7 +3111,6 @@ class LeaderboardPage(QWidget):
         )
 
     def refresh_labels(self):
-        self._refresh_btn.setText(S(self.settings, "leaderboard_refresh"))
         self._hdr_lbl.setText(S(self.settings, "nav_leaderboard").upper())
         self._tab_btn.setText(S(self.settings, "leaderboard_tab"))
         self._composer_btn.setText(S(self.settings, "leaderboard_composer"))
@@ -3157,7 +3128,6 @@ class LeaderboardPage(QWidget):
             f"QPushButton:checked{{color:{ac};border-color:{ac};"
             f"background:rgba(255,255,255,0.10);}}"
         )
-        self._refresh_btn.setStyleSheet(btn_qss)
         self._tab_btn.setStyleSheet(btn_qss)
         self._composer_btn.setStyleSheet(btn_qss)
 
@@ -3584,9 +3554,7 @@ class HUDWindow(QMainWindow):
         self._pg_settings.theme_changed.connect(self._on_theme_changed)
         self._pg_settings.pin_changed.connect(self._on_pin_changed)
         self._pg_analytics = AnalyticsPage(self.settings)
-        self._pg_analytics.refresh_clicked.connect(self._fetch)
         self._pg_leaderboard = LeaderboardPage(self.settings)
-        self._pg_leaderboard.refresh_clicked.connect(self._fetch)
         for pg in [
             self._pg_credits,
             self._pg_analytics,
@@ -3663,12 +3631,6 @@ class HUDWindow(QMainWindow):
         self._analytics_fetcher.start()
         log.debug("UsageEventsFetcher started")
 
-    def _on_analytics_refresh(self):
-        """Force re-fetch triggered by Refresh button."""
-        if self._last_data is None:
-            return
-        self._trigger_analytics_fetch(force=True)
-
     def _on_analytics_data(self, data: dict):
         self._analytics_data = data
         self._pg_analytics.update_data(data)
@@ -3710,12 +3672,6 @@ class HUDWindow(QMainWindow):
         self._leaderboard_fetcher.error.connect(self._on_leaderboard_error)
         self._leaderboard_fetcher.start()
         log.debug("LeaderboardFetcher started")
-
-    def _on_leaderboard_refresh(self):
-        """Force re-fetch triggered by Refresh button."""
-        if self._last_data is None:
-            return
-        self._trigger_leaderboard_fetch(force=True)
 
     def _on_leaderboard_data(self, data: dict):
         self._leaderboard_data = data
@@ -3947,11 +3903,14 @@ class HUDWindow(QMainWindow):
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
 
+        # Sync analytics and leaderboard with credit data updates
         if not from_cache and self.settings.get("show_experimental", False):
-            # Synchronize secondary API calls with the main Credits cycle
-            # We use force=True to ensure they refresh even if previously fetched
             self._trigger_analytics_fetch(force=True)
             self._trigger_leaderboard_fetch(force=True)
+        elif not from_cache:
+            self._analytics_pending = False
+            self._leaderboard_pending = False
+
 
         # Update tray tooltip with credit remaining
         if self._tray:
