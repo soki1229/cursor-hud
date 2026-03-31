@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.1 — 2026-03-31
+
+### Features
+- **Window height animation**: transitions between tabs and mini/full mode are now smooth, using `QPropertyAnimation` with an `OutCubic` easing curve.
+- **Offline data caching**: the app now saves the last successful API response to `cursor_hud_cache.json`. This allows the UI to populate immediately upon startup without waiting for a network response.
+- **GitHub update checker**: a new background thread (`UpdateChecker`) periodically checks the GitHub API for newer releases. A notification banner appears at the top of the window when an update is found.
+- **Synchronized API refreshes**: all data (Credits, Analytics, Leaderboard) is now refreshed via a single centralized master fetch cycle. Individual refresh buttons across tabs are synchronized.
+
+### Improvements
+- **Enhanced API error handling**: when Cursor's internal API returns an empty response (indicating endpoint changes), the error message now includes a direct link to the GitHub issues page.
+- **Python 3.9 compatibility**: improved type hinting and code structure to ensure compatibility with older Python environments while maintaining modern standards.
+
+---
+
 ## v1.0.0 — 2026-03-24
 
 ### Features

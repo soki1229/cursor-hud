@@ -10,68 +10,67 @@ Build EXE:
   python -m PyInstaller --onefile --windowed --name CursorHUD cursor_hud.py
 """
 
-import sys
-import os
-import sqlite3
-import shutil
-import logging
-import tempfile
 import base64
 import json
+import logging
 import math
-import datetime as _dt
-from datetime import datetime, timezone, date as _date
+import os
+import shutil
+import sqlite3
+import sys
+import tempfile
+from datetime import date as _date
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Union, Any, Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import requests
-from PyQt5.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QStackedWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QFrame,
-    QScrollArea,
-    QMessageBox,
-    QSizePolicy,
-    QTextEdit,
-    QDialog,
-    QTabWidget,
-    QSystemTrayIcon,
-    QMenu,
-    QAction,
-    QShortcut,
-)
 from PyQt5.QtCore import (
-    Qt,
-    QTimer,
-    QThread,
-    pyqtSignal,
-    QRectF,
-    QPointF,
-    QSize,
-    qInstallMessageHandler,
-    QPropertyAnimation,
     QEasingCurve,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+    qInstallMessageHandler,
 )
 from PyQt5.QtGui import (
-    QColor,
-    QPainter,
     QBrush,
-    QPen,
-    QPainterPath,
-    QPixmap,
-    QIcon,
-    QLinearGradient,
-    QRadialGradient,
+    QColor,
     QFont,
     QFontDatabase,
-    QScreen,
+    QIcon,
     QKeySequence,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QRadialGradient,
+    QScreen,
+)
+from PyQt5.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QShortcut,
+    QSizePolicy,
+    QStackedWidget,
+    QSystemTrayIcon,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -359,7 +358,7 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 BASE_URL = "https://cursor.com"
 GITHUB_URL = "https://github.com/soki1229/cursor-hud"
 GITHUB_API_URL = "https://api.github.com/repos/soki1229/cursor-hud/releases/latest"
@@ -832,7 +831,6 @@ def parse_data(raw: dict) -> dict:
         "limit_type": s.get("limitType", "—").upper(),
     }
 
-    incl_total = _safe_int(bk.get("included", 0))
     bonus_used = _safe_int(bk.get("bonus", 0))
     used_total = _safe_int(plan.get("used", 0))
 
@@ -1235,7 +1233,7 @@ class ArcGauge(QWidget):
         self._outer_color = color or c("accent")
         self.update()
 
-    def set_bonus(self, pct: float | None, color: QColor = None):
+    def set_bonus(self, pct: Optional[float], color: QColor = None):
         if pct is None:
             self._inner_pct = None
         else:
@@ -1641,7 +1639,7 @@ def section_hdr(text: str, accent_key: str = "t_muted") -> QLabel:
 #  DEBUG DIALOG
 # ══════════════════════════════════════════════════════════════
 class DebugDialog(QDialog):
-    def __init__(self, settings: dict, raw_json: dict | None = None, parent=None):
+    def __init__(self, settings: Dict, raw_json: Optional[Dict] = None, parent=None):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle(S(settings, "debug_title"))
@@ -3530,7 +3528,7 @@ class HUDWindow(QMainWindow):
         self._pin_btn.clicked.connect(self._toggle_pin)
         tl.addWidget(self._pin_btn)
 
-        self._win_btns: list[tuple[QPushButton, str | None]] = []
+        self._win_btns: List[Tuple[QPushButton, Optional[str]]] = []
         for sym, slot, hc in [
             ("─", self.showMinimized, None),
             ("✕", self.close, "#FF4660"),
@@ -3575,14 +3573,10 @@ class HUDWindow(QMainWindow):
         self._stack.setAttribute(Qt.WA_TranslucentBackground)
         self._pg_credits = CreditsPage(self.settings)
         self._pg_credits.retry_clicked.connect(self._fetch)
-        self._analytics_fetcher: UsageEventsFetcher | None = None
-        self._analytics_data: dict | None = None  # None until first successful fetch
-        self._analytics_pending: bool = (
-            False  # True when tab shown before _on_data fires
-        )
-        self._leaderboard_fetcher: LeaderboardFetcher | None = None
-        self._leaderboard_data: dict | None = None
-        self._leaderboard_pending: bool = False
+        self._analytics_fetcher: Optional[UsageEventsFetcher] = None
+        self._analytics_data: Optional[Dict] = None  # None until first successful fetch
+        self._leaderboard_fetcher: Optional[LeaderboardFetcher] = None
+        self._leaderboard_data: Optional[Dict] = None
         self._pg_profile = ProfilePage(self.settings)
         self._pg_settings = SettingsPage(self.settings)
         self._pg_settings.changed.connect(self._on_settings_changed)
@@ -3590,9 +3584,9 @@ class HUDWindow(QMainWindow):
         self._pg_settings.theme_changed.connect(self._on_theme_changed)
         self._pg_settings.pin_changed.connect(self._on_pin_changed)
         self._pg_analytics = AnalyticsPage(self.settings)
-        self._pg_analytics.refresh_clicked.connect(self._on_analytics_refresh)
+        self._pg_analytics.refresh_clicked.connect(self._fetch)
         self._pg_leaderboard = LeaderboardPage(self.settings)
-        self._pg_leaderboard.refresh_clicked.connect(self._on_leaderboard_refresh)
+        self._pg_leaderboard.refresh_clicked.connect(self._fetch)
         for pg in [
             self._pg_credits,
             self._pg_analytics,
@@ -3811,7 +3805,6 @@ class HUDWindow(QMainWindow):
         )
 
     def _refresh_title_btns(self):
-        mu = c("t_muted").name()
         br = c("t_bright").name()
         for btn in [self._theme_btn, self._mini_btn, self._pin_btn]:
             btn.setStyleSheet(_icon_btn_qss())

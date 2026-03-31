@@ -1,0 +1,29 @@
+# Ruff configuration
+# Exclude files that are not part of the core PR and may contain errors/style issues
+extend-exclude = [
+    "cursor_hud_after_01.py",
+    "cursor_hud_full.py",
+    "cursor_hud.py.orig",
+    "scripts",
+    "build",
+    "dist",
+    "__pycache__",
+    ".git",
+    ".github",
+    ".claude",
+    ".superpowers",
+    "curl-test",
+    "assets"
+]
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501", # Line too long (often unavoidable in GUI/QSS code)
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
