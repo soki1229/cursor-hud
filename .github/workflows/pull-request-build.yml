@@ -1,9 +1,9 @@
-name: Build & Release
+name: Pull Request Build
 
 on:
-  push:
-    tags:
-      - "v*"
+  pull_request:
+    branches:
+      - master
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-build
+          name: windows-pr-build
           path: dist/CursorHUD.exe
 
   build-macos:
@@ -85,7 +85,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-build
+          name: macos-pr-build
           path: CursorHUD-macOS.zip
 
   build-linux:
@@ -116,39 +116,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-build
+          name: linux-pr-build
           path: dist/CursorHUD-Linux
-
-  release:
-    needs: [build-windows, build-macos, build-linux]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release notes
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          awk -v tag="$TAG" '
-            index($0, "## " tag " ") == 1 { found=1; next }
-            found && index($0, "## ") == 1 { exit }
-            found { print }
-          ' CHANGELOG.md > release_notes.md
-          echo "Tag: $TAG"
-          echo "Release notes length: $(wc -c < release_notes.md) bytes"
-
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: release_notes.md
-          files: |
-            artifacts/windows-build/CursorHUD.exe
-            artifacts/macos-build/CursorHUD-macOS.zip
-            artifacts/linux-build/CursorHUD-Linux
