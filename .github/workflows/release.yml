@@ -30,6 +30,9 @@ jobs:
         run: ruff check .
 
       - name: Run tests (Pytest)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: .
         run: pytest tests/
 
   build-windows:
