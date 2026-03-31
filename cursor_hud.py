@@ -22,20 +22,58 @@ import math
 import datetime as _dt
 from datetime import datetime, timezone, date as _date
 from pathlib import Path
+from typing import Optional, Union, Any, Dict, List, Tuple
 
 import requests
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QStackedWidget,
-    QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QMessageBox, QSizePolicy,
-    QTextEdit, QDialog, QTabWidget, QSystemTrayIcon, QMenu, QAction,
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QStackedWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QFrame,
+    QScrollArea,
+    QMessageBox,
+    QSizePolicy,
+    QTextEdit,
+    QDialog,
+    QTabWidget,
+    QSystemTrayIcon,
+    QMenu,
+    QAction,
     QShortcut,
 )
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QRectF, QPointF, QSize, qInstallMessageHandler
-from PyQt5.QtGui import (
-    QColor, QPainter, QBrush, QPen, QPainterPath, QPixmap, QIcon,
-    QLinearGradient, QRadialGradient, QFont, QFontDatabase, QScreen, QKeySequence,
+from PyQt5.QtCore import (
+    Qt,
+    QTimer,
+    QThread,
+    pyqtSignal,
+    QRectF,
+    QPointF,
+    QSize,
+    qInstallMessageHandler,
+    QPropertyAnimation,
+    QEasingCurve,
 )
+from PyQt5.QtGui import (
+    QColor,
+    QPainter,
+    QBrush,
+    QPen,
+    QPainterPath,
+    QPixmap,
+    QIcon,
+    QLinearGradient,
+    QRadialGradient,
+    QFont,
+    QFontDatabase,
+    QScreen,
+    QKeySequence,
+)
+
 
 # ══════════════════════════════════════════════════════════════
 #  EXE-SAFE PATHS
@@ -45,9 +83,11 @@ def _app_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).parent
 
-APP_DIR       = _app_dir()
+
+APP_DIR = _app_dir()
 SETTINGS_FILE = APP_DIR / "cursor_hud_settings.json"
-LOG_FILE      = APP_DIR / "cursor_hud.log"
+CACHE_FILE = APP_DIR / "cursor_hud_cache.json"
+LOG_FILE = APP_DIR / "cursor_hud.log"
 
 # ══════════════════════════════════════════════════════════════
 #  LOGGING
@@ -77,11 +117,12 @@ class _MemHandler(logging.Handler):
     def emit(self, record):
         self.records.append(self.format(record))
         if len(self.records) > self.MAX:
-            self.records = self.records[-self.MAX:]
+            self.records = self.records[-self.MAX :]
 
 
 _mem_log = _MemHandler()
 logging.getLogger("CursorHUD").addHandler(_mem_log)
+
 
 # ══════════════════════════════════════════════════════════════
 #  USAGE METRICS (local-only event counters for UX analysis)
@@ -113,71 +154,107 @@ THEMES: dict[str, dict] = {
     "dark": {
         "name": "dark",
         "font": "Space Grotesk",
-        "bg_win": (10, 12, 24), "bg_win2": (5, 7, 16), "bg_card": (13, 16, 28),
-        "accent": (0, 220, 255), "accent2": (130, 80, 255),
-        "c_green": (0, 240, 140), "c_amber": (255, 185, 50), "c_red": (255, 70, 90),
-        "t_bright": (230, 240, 255), "t_body": (170, 185, 215),
-        "t_muted": (90, 110, 150), "t_dim": (50, 65, 95),
-        "border_lo": (255, 255, 255, 18), "border_hi": (0, 220, 255, 45),
-        "scrollbar": "rgba(0,220,255,0.22)", "hatch_alpha": 38,
+        "bg_win": (10, 12, 24),
+        "bg_win2": (5, 7, 16),
+        "bg_card": (13, 16, 28),
+        "accent": (0, 220, 255),
+        "accent2": (130, 80, 255),
+        "c_green": (0, 240, 140),
+        "c_amber": (255, 185, 50),
+        "c_red": (255, 70, 90),
+        "t_bright": (230, 240, 255),
+        "t_body": (170, 185, 215),
+        "t_muted": (90, 110, 150),
+        "t_dim": (50, 65, 95),
+        "border_lo": (255, 255, 255, 18),
+        "border_hi": (0, 220, 255, 45),
+        "scrollbar": "rgba(0,220,255,0.22)",
+        "hatch_alpha": 38,
         "track_bg": (255, 255, 255, 30),
     },
     "light": {
         "name": "light",
         "font": "Nunito",
-        "bg_win": (240, 244, 255), "bg_win2": (225, 232, 248), "bg_card": (255, 255, 255),
-        "accent": (0, 145, 200), "accent2": (100, 55, 210),
-        "c_green": (0, 170, 90), "c_amber": (200, 130, 0), "c_red": (210, 40, 60),
-        "t_bright": (15, 20, 45), "t_body": (55, 70, 110),
-        "t_muted": (130, 145, 180), "t_dim": (185, 195, 220),
-        "border_lo": (0, 0, 0, 20), "border_hi": (0, 145, 200, 60),
-        "scrollbar": "rgba(0,145,200,0.30)", "hatch_alpha": 55,
+        "bg_win": (240, 244, 255),
+        "bg_win2": (225, 232, 248),
+        "bg_card": (255, 255, 255),
+        "accent": (0, 145, 200),
+        "accent2": (100, 55, 210),
+        "c_green": (0, 170, 90),
+        "c_amber": (200, 130, 0),
+        "c_red": (210, 40, 60),
+        "t_bright": (15, 20, 45),
+        "t_body": (55, 70, 110),
+        "t_muted": (130, 145, 180),
+        "t_dim": (185, 195, 220),
+        "border_lo": (0, 0, 0, 20),
+        "border_hi": (0, 145, 200, 60),
+        "scrollbar": "rgba(0,145,200,0.30)",
+        "hatch_alpha": 55,
         "track_bg": (0, 0, 0, 22),
     },
     "midnight": {
         "name": "midnight",
         "font": "Raleway",
-        "bg_win": (6, 4, 18), "bg_win2": (2, 1, 9), "bg_card": (12, 8, 28),
-        "accent": (160, 80, 255), "accent2": (255, 60, 160),
-        "c_green": (0, 220, 120), "c_amber": (255, 160, 40), "c_red": (255, 50, 80),
-        "t_bright": (240, 230, 255), "t_body": (185, 165, 220),
-        "t_muted": (100, 80, 145), "t_dim": (55, 40, 90),
-        "border_lo": (255, 255, 255, 14), "border_hi": (160, 80, 255, 55),
-        "scrollbar": "rgba(160,80,255,0.28)", "hatch_alpha": 35,
+        "bg_win": (6, 4, 18),
+        "bg_win2": (2, 1, 9),
+        "bg_card": (12, 8, 28),
+        "accent": (160, 80, 255),
+        "accent2": (255, 60, 160),
+        "c_green": (0, 220, 120),
+        "c_amber": (255, 160, 40),
+        "c_red": (255, 50, 80),
+        "t_bright": (240, 230, 255),
+        "t_body": (185, 165, 220),
+        "t_muted": (100, 80, 145),
+        "t_dim": (55, 40, 90),
+        "border_lo": (255, 255, 255, 14),
+        "border_hi": (160, 80, 255, 55),
+        "scrollbar": "rgba(160,80,255,0.28)",
+        "hatch_alpha": 35,
         "track_bg": (255, 255, 255, 24),
     },
     "matrix": {
         "name": "matrix",
         "font": "Fira Code",
-        "bg_win": (0, 8, 0), "bg_win2": (0, 4, 0), "bg_card": (0, 14, 0),
-        "accent": (0, 255, 70), "accent2": (0, 200, 50),
-        "c_green": (0, 255, 70), "c_amber": (180, 255, 0), "c_red": (255, 100, 0),
-        "t_bright": (200, 255, 200), "t_body": (100, 200, 100),
-        "t_muted": (40, 110, 40), "t_dim": (20, 55, 20),
-        "border_lo": (0, 255, 70, 16), "border_hi": (0, 255, 70, 50),
-        "scrollbar": "rgba(0,255,70,0.25)", "hatch_alpha": 30,
+        "bg_win": (0, 8, 0),
+        "bg_win2": (0, 4, 0),
+        "bg_card": (0, 14, 0),
+        "accent": (0, 255, 70),
+        "accent2": (0, 200, 50),
+        "c_green": (0, 255, 70),
+        "c_amber": (180, 255, 0),
+        "c_red": (255, 100, 0),
+        "t_bright": (200, 255, 200),
+        "t_body": (100, 200, 100),
+        "t_muted": (40, 110, 40),
+        "t_dim": (20, 55, 20),
+        "border_lo": (0, 255, 70, 16),
+        "border_hi": (0, 255, 70, 50),
+        "scrollbar": "rgba(0,255,70,0.25)",
+        "hatch_alpha": 30,
         "track_bg": (0, 255, 70, 22),
     },
     "native": {
         "name": "native",
         "font": "Inter",
-        "bg_win":    (10, 10, 10),
-        "bg_win2":   (4,  4,  4),
-        "bg_card":   (20, 20, 20),
-        "accent":    (220, 220, 225),
-        "accent2":   (155, 155, 165),
-        "c_green":   (0, 195, 105),
-        "c_amber":   (215, 155, 40),
-        "c_red":     (215, 58, 72),
-        "t_bright":  (237, 237, 237),
-        "t_body":    (148, 148, 155),
-        "t_muted":   (78, 78, 84),
-        "t_dim":     (38, 38, 44),
+        "bg_win": (10, 10, 10),
+        "bg_win2": (4, 4, 4),
+        "bg_card": (20, 20, 20),
+        "accent": (220, 220, 225),
+        "accent2": (155, 155, 165),
+        "c_green": (0, 195, 105),
+        "c_amber": (215, 155, 40),
+        "c_red": (215, 58, 72),
+        "t_bright": (237, 237, 237),
+        "t_body": (148, 148, 155),
+        "t_muted": (78, 78, 84),
+        "t_dim": (38, 38, 44),
         "border_lo": (255, 255, 255, 11),
         "border_hi": (220, 220, 225, 38),
         "scrollbar": "rgba(255,255,255,0.11)",
         "hatch_alpha": 20,
-        "track_bg":  (255, 255, 255, 16),
+        "track_bg": (255, 255, 255, 16),
     },
 }
 
@@ -199,6 +276,7 @@ def c(key: str) -> QColor:
 
 
 _loaded_fonts: set[str] = set()
+
 
 def apply_theme(name: str):
     global _THEME, _UI_FONT
@@ -281,8 +359,10 @@ def _theme_btn_qss(theme: dict, checked: bool = False) -> str:
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════
-VERSION   = "1.0.0"
-BASE_URL  = "https://cursor.com"
+VERSION = "1.0.0"
+BASE_URL = "https://cursor.com"
+GITHUB_URL = "https://github.com/soki1229/cursor-hud"
+GITHUB_API_URL = "https://api.github.com/repos/soki1229/cursor-hud/releases/latest"
 
 # Platform-appropriate fonts — avoids Qt alias-lookup penalty for missing families
 if sys.platform == "win32":
@@ -294,16 +374,16 @@ elif sys.platform == "darwin":
 else:
     _OS_DEFAULT_FONT = _UI_FONT = "DejaVu Sans"
     _MONO_FONT = "DejaVu Sans Mono"
-WIN_W     = 400
+WIN_W = 400
 WIN_W_MAX = 500
-WIN_H     = 660
-SNAP_PX       = 30      # px threshold for edge-snap on drag release
-MINI_AMOUNT_W = 56      # mini-mode: fixed amount column width (px)
-CHIP_W        = 8       # mini-mode: chip width (px)
-CHIP_H        = 6       # mini-mode: chip height (px)
-CHIP_GAP      = 3       # mini-mode: gap between chips (px)
-CHIPS_MAX     = 10      # mini-mode: max chips per row
-CHIPS_AREA_W  = CHIPS_MAX * CHIP_W + (CHIPS_MAX - 1) * CHIP_GAP  # fixed chips area width
+WIN_H = 660
+SNAP_PX = 30  # px threshold for edge-snap on drag release
+MINI_AMOUNT_W = 56  # mini-mode: fixed amount column width (px)
+CHIP_W = 8  # mini-mode: chip width (px)
+CHIP_H = 6  # mini-mode: chip height (px)
+CHIP_GAP = 3  # mini-mode: gap between chips (px)
+CHIPS_MAX = 10  # mini-mode: max chips per row
+CHIPS_AREA_W = CHIPS_MAX * CHIP_W + (CHIPS_MAX - 1) * CHIP_GAP  # fixed chips area width
 ARC_MIN_W = 240
 
 
@@ -321,135 +401,210 @@ except (ValueError, TypeError):
 # ══════════════════════════════════════════════════════════════
 STRINGS: dict[str, dict[str, str]] = {
     "ko": {
-        "nav_credit": "크레딧", "nav_profile": "프로필", "nav_settings": "설정",
-        "spent_label": "소진", "remain_label": "잔여", "bonus_saved": "보너스 절약",
+        "nav_credit": "크레딧",
+        "nav_profile": "프로필",
+        "nav_settings": "설정",
+        "spent_label": "소진",
+        "remain_label": "잔여",
+        "bonus_saved": "보너스 절약",
         "personal_section": "개인 크레딧",
-        "incl_row": "기본 포함", "bonus_row": "보너스 사용", "bonus_free_label": "무료 처리됨",
-        "status_included": "기본 크레딧 사용 중", "status_bonus": "보너스 크레딧 사용 중",
+        "incl_row": "기본 포함",
+        "bonus_row": "보너스 사용",
+        "bonus_free_label": "무료 처리됨",
+        "status_included": "기본 크레딧 사용 중",
+        "status_bonus": "보너스 크레딧 사용 중",
         "status_od": "추가 과금 사용 중",
-        "status_badge_incl": "기본 크레딧 소진 중", "status_badge_bonus": "보너스 크레딧 소진 중",
+        "status_badge_incl": "기본 크레딧 소진 중",
+        "status_badge_bonus": "보너스 크레딧 소진 중",
         "status_badge_od": "PAYG",
-        "row_incl": "기본 플랜", "row_bonus": "보너스", "row_extra": "추가 과금",
-        "personal_od": "추가 과금", "org_section": "조직 크레딧", "org_od": "추가 과금 (팀)",
+        "row_incl": "기본 플랜",
+        "row_bonus": "보너스",
+        "row_extra": "추가 과금",
+        "personal_od": "추가 과금",
+        "org_section": "조직 크레딧",
+        "org_od": "추가 과금 (팀)",
         "not_used": "미사용",
         "official_pct": "Cursor 공식 사용률",
-        "auto_pct": "Auto 모델 사용률", "api_pct": "Named 모델 사용률",
-        "profile_title": "계정", "field_name": "이름", "field_email": "이메일",
-        "field_verified": "인증", "field_since": "가입일", "field_days": "가입 기간",
-        "field_plan": "플랜", "field_cycle": "청구 주기",
-        "verified_yes": "✓ 인증됨", "verified_no": "✗ 미인증", "member_days": "일",
-        "settings_title": "설정", "lang_label": "언어", "theme_label": "테마",
-        "theme_dark": "다크", "theme_light": "라이트",
-        "theme_midnight": "미드나잇", "theme_matrix": "매트릭스",
+        "auto_pct": "Auto 모델 사용률",
+        "api_pct": "Named 모델 사용률",
+        "profile_title": "계정",
+        "field_name": "이름",
+        "field_email": "이메일",
+        "field_verified": "인증",
+        "field_since": "가입일",
+        "field_days": "가입 기간",
+        "field_plan": "플랜",
+        "field_cycle": "청구 주기",
+        "verified_yes": "✓ 인증됨",
+        "verified_no": "✗ 미인증",
+        "member_days": "일",
+        "settings_title": "설정",
+        "lang_label": "언어",
+        "theme_label": "테마",
+        "theme_dark": "다크",
+        "theme_light": "라이트",
+        "theme_midnight": "미드나잇",
+        "theme_matrix": "매트릭스",
         "theme_native": "네이티브",
         "show_sections": "표시 항목",
-        "show_personal": "개인 크레딧", "show_org": "조직 크레딧", "show_official": "공식 사용률",
-        "auto_saved": "자동 저장됨", "refresh_btn": "↻",
-        "next_refresh": "갱신까지", "seconds": "초",
+        "show_personal": "개인 크레딧",
+        "show_org": "조직 크레딧",
+        "show_official": "공식 사용률",
+        "auto_saved": "자동 저장됨",
+        "refresh_btn": "↻",
+        "next_refresh": "갱신까지",
+        "seconds": "초",
         "err_no_db": "Cursor DB를 찾을 수 없음\n",
-        "err_token": "토큰 읽기 실패", "err_api": "API 응답 없음",
+        "err_token": "토큰 읽기 실패",
+        "err_api": "API 응답 없음",
         "err_fetch": "데이터를 불러올 수 없습니다.",
         "err_retry": "재시도",
         "free_plan_notice": "크레딧 미제공 플랜",
-        "lang_ko": "한국어", "lang_en": "영어",
-        "debug_btn": "로그", "debug_title": "디버그 로그",
-        "debug_copy": "복사", "debug_close": "닫기",
-        "startup_boot": "부팅 시 자동실행", "pin_top": "항상 위",
-        "tray_show": "열기", "tray_refresh": "새로고침", "tray_quit": "종료",
+        "lang_ko": "한국어",
+        "lang_en": "영어",
+        "debug_btn": "로그",
+        "debug_title": "디버그 로그",
+        "debug_copy": "복사",
+        "debug_close": "닫기",
+        "startup_boot": "부팅 시 자동실행",
+        "pin_top": "항상 위",
+        "tray_show": "열기",
+        "tray_refresh": "새로고침",
+        "tray_quit": "종료",
         "experimental_section": "실험적 기능",
-        "experimental_toggle":  "실험적 기능 활성화",
-        "experimental_hint":    "불안정하거나 변경될 수 있는 기능입니다",
-        "nav_analytics":        "분석",
-        "analytics_refresh":    "새로고침",
-        "analytics_loading":    "불러오는 중…",
-        "analytics_waiting":    "데이터 대기 중…",
-        "analytics_error":      "불러오기 실패",
-        "analytics_no_data":    "데이터 없음",
+        "experimental_toggle": "실험적 기능 활성화",
+        "experimental_hint": "불안정하거나 변경될 수 있는 기능입니다",
+        "nav_analytics": "분석",
+        "analytics_refresh": "새로고침",
+        "analytics_loading": "불러오는 중…",
+        "analytics_waiting": "데이터 대기 중…",
+        "analytics_error": "불러오기 실패",
+        "analytics_no_data": "데이터 없음",
         "analytics_team_spend": "팀 지출",
         "analytics_model_usage": "모델 사용량",
         "analytics_cycle_label": "청구 주기",
-        "analytics_members":    "명",
+        "analytics_members": "명",
         "analytics_events_badge": "{n}건",
-        "nav_leaderboard":        "리더보드",
-        "leaderboard_refresh":    "새로고침",
-        "leaderboard_loading":    "불러오는 중…",
-        "leaderboard_waiting":    "데이터 대기 중…",
-        "leaderboard_error":      "불러오기 실패",
-        "leaderboard_no_data":    "데이터 없음",
-        "leaderboard_tab":        "탭",
-        "leaderboard_composer":   "컴포저",
-        "leaderboard_members":    "명",
-        "leaderboard_cycle_label":"청구 주기",
+        "nav_leaderboard": "리더보드",
+        "leaderboard_refresh": "새로고침",
+        "leaderboard_loading": "불러오는 중…",
+        "leaderboard_waiting": "데이터 대기 중…",
+        "leaderboard_error": "불러오기 실패",
+        "leaderboard_no_data": "데이터 없음",
+        "leaderboard_tab": "탭",
+        "leaderboard_composer": "컴포저",
+        "leaderboard_members": "명",
+        "leaderboard_cycle_label": "청구 주기",
     },
     "en": {
-        "nav_credit": "Credits", "nav_profile": "Profile", "nav_settings": "Settings",
-        "spent_label": "Spent", "remain_label": "remaining", "bonus_saved": "bonus saved",
+        "nav_credit": "Credits",
+        "nav_profile": "Profile",
+        "nav_settings": "Settings",
+        "spent_label": "Spent",
+        "remain_label": "remaining",
+        "bonus_saved": "bonus saved",
         "personal_section": "Personal Credits",
-        "incl_row": "Included", "bonus_row": "Bonus Used", "bonus_free_label": "free of charge",
-        "status_included": "On included credits", "status_bonus": "On bonus credits",
+        "incl_row": "Included",
+        "bonus_row": "Bonus Used",
+        "bonus_free_label": "free of charge",
+        "status_included": "On included credits",
+        "status_bonus": "On bonus credits",
         "status_od": "On-Demand active",
-        "status_badge_incl": "On included credits", "status_badge_bonus": "On bonus credits",
+        "status_badge_incl": "On included credits",
+        "status_badge_bonus": "On bonus credits",
         "status_badge_od": "PAYG",
-        "row_incl": "Plan credits", "row_bonus": "Bonus", "row_extra": "On-Demand",
-        "personal_od": "On-Demand", "org_section": "Organization Credits",
-        "org_od": "On-Demand (Team)", "not_used": "Not Used",
+        "row_incl": "Plan credits",
+        "row_bonus": "Bonus",
+        "row_extra": "On-Demand",
+        "personal_od": "On-Demand",
+        "org_section": "Organization Credits",
+        "org_od": "On-Demand (Team)",
+        "not_used": "Not Used",
         "official_pct": "Cursor Official Usage",
-        "auto_pct": "Auto Model Usage", "api_pct": "Named Model Usage",
-        "profile_title": "Account", "field_name": "Name", "field_email": "Email",
-        "field_verified": "Verified", "field_since": "Member Since",
-        "field_days": "Membership", "field_plan": "Plan", "field_cycle": "Billing Cycle",
-        "verified_yes": "✓ Verified", "verified_no": "✗ Not Verified", "member_days": "days",
-        "settings_title": "Settings", "lang_label": "Language", "theme_label": "Theme",
-        "theme_dark": "Dark", "theme_light": "Light",
-        "theme_midnight": "Midnight", "theme_matrix": "Matrix",
+        "auto_pct": "Auto Model Usage",
+        "api_pct": "Named Model Usage",
+        "profile_title": "Account",
+        "field_name": "Name",
+        "field_email": "Email",
+        "field_verified": "Verified",
+        "field_since": "Member Since",
+        "field_days": "Membership",
+        "field_plan": "Plan",
+        "field_cycle": "Billing Cycle",
+        "verified_yes": "✓ Verified",
+        "verified_no": "✗ Not Verified",
+        "member_days": "days",
+        "settings_title": "Settings",
+        "lang_label": "Language",
+        "theme_label": "Theme",
+        "theme_dark": "Dark",
+        "theme_light": "Light",
+        "theme_midnight": "Midnight",
+        "theme_matrix": "Matrix",
         "theme_native": "Native",
         "show_sections": "Visible Sections",
-        "show_personal": "Personal Credits", "show_org": "Organization Credits",
+        "show_personal": "Personal Credits",
+        "show_org": "Organization Credits",
         "show_official": "Usage Rates",
-        "auto_saved": "Auto-saved", "refresh_btn": "↻",
-        "next_refresh": "Next refresh", "seconds": "s",
+        "auto_saved": "Auto-saved",
+        "refresh_btn": "↻",
+        "next_refresh": "Next refresh",
+        "seconds": "s",
         "err_no_db": "Cursor DB not found\n",
-        "err_token": "Failed to read token", "err_api": "No API response",
+        "err_token": "Failed to read token",
+        "err_api": "No API response",
         "err_fetch": "Failed to load data.",
         "err_retry": "Retry",
         "free_plan_notice": "No credit data on Free plan",
-        "lang_ko": "Korean", "lang_en": "English",
-        "debug_btn": "Log", "debug_title": "Debug Log",
-        "debug_copy": "Copy", "debug_close": "Close",
-        "startup_boot": "Start on Boot", "pin_top": "Always on Top",
-        "tray_show": "Show", "tray_refresh": "Refresh", "tray_quit": "Quit",
+        "lang_ko": "Korean",
+        "lang_en": "English",
+        "debug_btn": "Log",
+        "debug_title": "Debug Log",
+        "debug_copy": "Copy",
+        "debug_close": "Close",
+        "startup_boot": "Start on Boot",
+        "pin_top": "Always on Top",
+        "tray_show": "Show",
+        "tray_refresh": "Refresh",
+        "tray_quit": "Quit",
         "experimental_section": "Experimental",
-        "experimental_toggle":  "Enable experimental features",
-        "experimental_hint":    "Features that may change or break",
-        "nav_analytics":        "Analytics",
-        "analytics_refresh":    "Refresh",
-        "analytics_loading":    "Loading…",
-        "analytics_waiting":    "Waiting for data…",
-        "analytics_error":      "Failed to load",
-        "analytics_no_data":    "No data",
+        "experimental_toggle": "Enable experimental features",
+        "experimental_hint": "Features that may change or break",
+        "nav_analytics": "Analytics",
+        "analytics_refresh": "Refresh",
+        "analytics_loading": "Loading…",
+        "analytics_waiting": "Waiting for data…",
+        "analytics_error": "Failed to load",
+        "analytics_no_data": "No data",
         "analytics_team_spend": "Team Spend",
         "analytics_model_usage": "Model Usage",
         "analytics_cycle_label": "Billing cycle",
-        "analytics_members":    "members",
+        "analytics_members": "members",
         "analytics_events_badge": "{n} events",
-        "nav_leaderboard":        "Leaderboard",
-        "leaderboard_refresh":    "Refresh",
-        "leaderboard_loading":    "Loading…",
-        "leaderboard_waiting":    "Waiting for data…",
-        "leaderboard_error":      "Failed to load",
-        "leaderboard_no_data":    "No data",
-        "leaderboard_tab":        "Tab",
-        "leaderboard_composer":   "Composer",
-        "leaderboard_members":    "members",
-        "leaderboard_cycle_label":"Billing cycle",
+        "nav_leaderboard": "Leaderboard",
+        "leaderboard_refresh": "Refresh",
+        "leaderboard_loading": "Loading…",
+        "leaderboard_waiting": "Waiting for data…",
+        "leaderboard_error": "Failed to load",
+        "leaderboard_no_data": "No data",
+        "leaderboard_tab": "Tab",
+        "leaderboard_composer": "Composer",
+        "leaderboard_members": "members",
+        "leaderboard_cycle_label": "Billing cycle",
     },
 }
 
 DEFAULT_SETTINGS: dict = {
-    "lang": "en", "theme": "light",
-    "show_personal": True, "show_org": True, "show_official": True,
+    "lang": "en",
+    "theme": "light",
+    "show_personal": True,
+    "show_org": True,
+    "show_official": True,
     "pin_on_top": True,
-    "win_x": None, "win_y": None, "win_w": WIN_W, "mini_mode": False,
+    "win_x": None,
+    "win_y": None,
+    "win_w": WIN_W,
+    "mini_mode": False,
     "show_experimental": False,  # gates all Experimental features
 }
 
@@ -469,6 +624,24 @@ def save_settings(s: dict):
         SETTINGS_FILE.write_text(json.dumps(s, indent=2), encoding="utf-8")
     except Exception as e:
         log.error("save_settings failed: %s", e)
+
+
+def load_cache() -> Optional[Dict]:
+    if CACHE_FILE.exists():
+        try:
+            return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return None
+
+
+def save_cache(raw: Dict):
+    try:
+        CACHE_FILE.write_text(
+            json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception as e:
+        log.error("save_cache failed: %s", e)
 
 
 def S(settings: dict, key: str) -> str:
@@ -536,12 +709,12 @@ def read_cursor_token() -> tuple[str, str]:
 
 def api_headers(cookie: str) -> dict:
     return {
-        "Cookie":       f"WorkosCursorSessionToken={cookie}",
+        "Cookie": f"WorkosCursorSessionToken={cookie}",
         "Content-Type": "application/json",
-        "Accept":       "application/json",
-        "Origin":       "https://cursor.com",
-        "Referer":      "https://cursor.com/",
-        "User-Agent":   "Mozilla/5.0 (X11; Linux x86_64) Chrome/122.0.0.0",
+        "Accept": "application/json",
+        "Origin": "https://cursor.com",
+        "Referer": "https://cursor.com/",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/122.0.0.0",
     }
 
 
@@ -565,8 +738,9 @@ class DataFetcher(QThread):
         try:
             return r.json()
         except ValueError:
-            log.warning("GET %s → non-JSON body (HTTP %s): %.80r",
-                        path, r.status_code, r.text)
+            log.warning(
+                "GET %s → non-JSON body (HTTP %s): %.80r", path, r.status_code, r.text
+            )
             return None
 
     def run(self):
@@ -581,18 +755,47 @@ class DataFetcher(QThread):
             summary = self._get(sess, "/api/usage-summary")
             profile = self._get(sess, "/api/auth/me")
             raw = {
-                "summary":    summary or {},
+                "summary": summary or {},
                 "summary_ok": summary is not None,
-                "profile":    profile or {},
-                "email":      email,
+                "profile": profile or {},
+                "email": email,
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
             }
             self.ready.emit(raw)
         except Exception as exc:
             cookie = "[REDACTED]"  # prevent token leaking in traceback
-            log.error("DataFetcher.run: %s: %s",
-                      type(exc).__name__, exc, exc_info=False)
+            log.error(
+                "DataFetcher.run: %s: %s", type(exc).__name__, exc, exc_info=False
+            )
             self.error.emit(str(exc))
+
+
+# ══════════════════════════════════════════════════════════════
+#  UPDATE CHECKER
+# ══════════════════════════════════════════════════════════════
+class UpdateChecker(QThread):
+    """Checks GitHub for a newer version (Semantic Versioning)."""
+
+    new_version_found = pyqtSignal(str, str)  # (version_tag, download_url)
+
+    def run(self):
+        try:
+            r = requests.get(GITHUB_API_URL, timeout=10)
+            if not r.ok:
+                return
+            data = r.json()
+            latest = data.get("tag_name", "").replace("v", "")
+            if not latest:
+                return
+
+            # Simple semantic comparison (v1.0.0 style)
+            def _v(s):
+                return [int(x) for x in s.split(".") if x.isdigit()]
+
+            if _v(latest) > _v(VERSION):
+                self.new_version_found.emit(latest, data.get("html_url", GITHUB_URL))
+        except Exception:
+            pass
 
 
 # ══════════════════════════════════════════════════════════════
@@ -613,27 +816,27 @@ def _safe_float(v, default: float = 0.0) -> float:
 
 
 def parse_data(raw: dict) -> dict:
-    s  = raw.get("summary", {}) or {}
+    s = raw.get("summary", {}) or {}
     pr = raw.get("profile", {}) or {}
 
-    ind  = s.get("individualUsage", {})
+    ind = s.get("individualUsage", {})
     plan = ind.get("plan", {})
-    bk   = plan.get("breakdown", {})
+    bk = plan.get("breakdown", {})
     od_p = ind.get("onDemand", {})
     od_t = s.get("teamUsage", {}).get("onDemand", {})
 
     cycle = {
-        "start":      s.get("billingCycleStart", "")[:10],
-        "end":        s.get("billingCycleEnd",   "")[:10],
+        "start": s.get("billingCycleStart", "")[:10],
+        "end": s.get("billingCycleEnd", "")[:10],
         "membership": s.get("membershipType", "—").upper(),
-        "limit_type": s.get("limitType",      "—").upper(),
+        "limit_type": s.get("limitType", "—").upper(),
     }
 
-    incl_total  = _safe_int(bk.get("included", 0))
-    bonus_used  = _safe_int(bk.get("bonus",    0))
-    used_total  = _safe_int(plan.get("used",   0))
+    incl_total = _safe_int(bk.get("included", 0))
+    bonus_used = _safe_int(bk.get("bonus", 0))
+    used_total = _safe_int(plan.get("used", 0))
 
-    plan_limit  = plan.get("limit")
+    plan_limit = plan.get("limit")
     plan_remain = plan.get("remaining")
     if plan_limit:
         budget_total = _safe_int(plan_limit)
@@ -641,29 +844,34 @@ def parse_data(raw: dict) -> dict:
         budget_total = used_total + _safe_int(plan_remain)
     else:
         budget_total = _safe_int(bk.get("total", 0))
-    budget_remain = (_safe_int(plan_remain) if plan_remain is not None
-                     else max(0, budget_total - used_total))
+    budget_remain = (
+        _safe_int(plan_remain)
+        if plan_remain is not None
+        else max(0, budget_total - used_total)
+    )
     incl_remain = max(0, budget_total - used_total)
 
     credit = {
-        "incl_total":       budget_total,
-        "incl_used":        used_total,
-        "incl_remain":      incl_remain,
-        "incl_remain_pct":  (incl_remain / budget_total * 100) if budget_total else 0,
-        "bonus_used":       bonus_used,
-        "budget_total":     budget_total,
-        "budget_used":      used_total,
-        "budget_pct":       (used_total / budget_total * 100) if budget_total else 0,
-        "budget_remain":    budget_remain,
-        "budget_remain_pct": (budget_remain / budget_total * 100) if budget_total else 0,
-        "api_pct":          _safe_float(plan.get("apiPercentUsed",   0)),
-        "auto_pct":         _safe_float(plan.get("autoPercentUsed",  0)),
-        "total_pct":        _safe_float(plan.get("totalPercentUsed", 0)),
+        "incl_total": budget_total,
+        "incl_used": used_total,
+        "incl_remain": incl_remain,
+        "incl_remain_pct": (incl_remain / budget_total * 100) if budget_total else 0,
+        "bonus_used": bonus_used,
+        "budget_total": budget_total,
+        "budget_used": used_total,
+        "budget_pct": (used_total / budget_total * 100) if budget_total else 0,
+        "budget_remain": budget_remain,
+        "budget_remain_pct": (budget_remain / budget_total * 100)
+        if budget_total
+        else 0,
+        "api_pct": _safe_float(plan.get("apiPercentUsed", 0)),
+        "auto_pct": _safe_float(plan.get("autoPercentUsed", 0)),
+        "total_pct": _safe_float(plan.get("totalPercentUsed", 0)),
     }
 
     on_demand = {
         "personal": _safe_int(od_p.get("used", 0)),
-        "team":     _safe_int(od_t.get("used", 0)),
+        "team": _safe_int(od_t.get("used", 0)),
     }
 
     created = pr.get("created_at", "") or ""
@@ -676,10 +884,10 @@ def parse_data(raw: dict) -> dict:
             pass
 
     profile = {
-        "name":        pr.get("name",  "") or raw.get("email", ""),
-        "email":       pr.get("email", "") or raw.get("email", ""),
-        "verified":    bool(pr.get("email_verified", False)),
-        "created_at":  created[:10],
+        "name": pr.get("name", "") or raw.get("email", ""),
+        "email": pr.get("email", "") or raw.get("email", ""),
+        "verified": bool(pr.get("email_verified", False)),
+        "created_at": created[:10],
         "days_member": days_member,
     }
 
@@ -691,26 +899,26 @@ def parse_data(raw: dict) -> dict:
     # teamId for CSV export — try several paths (undocumented API, field name varies).
     # pr.get("id") is deliberately excluded: it is the userId, not the teamId.
     _team_candidates = {
-        "summary.teamId":              s.get("teamId"),
-        "summary.teamUsage.teamId":    s.get("teamUsage", {}).get("teamId"),
-        "summary.organizationId":      s.get("organizationId"),
-        "profile.teamId":              pr.get("teamId"),
-        "profile.organizationId":      pr.get("organizationId"),
+        "summary.teamId": s.get("teamId"),
+        "summary.teamUsage.teamId": s.get("teamUsage", {}).get("teamId"),
+        "summary.organizationId": s.get("organizationId"),
+        "profile.teamId": pr.get("teamId"),
+        "profile.organizationId": pr.get("organizationId"),
     }
     log.info("teamId candidates: %s", _team_candidates)
     team_id = next((str(v) for v in _team_candidates.values() if v), "")
 
     return {
-        "cycle":        cycle,
-        "credit":       credit,
-        "on_demand":    on_demand,
-        "profile":      profile,
-        "hint":         s.get("autoModelSelectedDisplayMessage", "") or "",
-        "fetched_at":   raw.get("fetched_at", ""),
-        "is_free":      is_free,
-        "is_team":      is_team,
+        "cycle": cycle,
+        "credit": credit,
+        "on_demand": on_demand,
+        "profile": profile,
+        "hint": s.get("autoModelSelectedDisplayMessage", "") or "",
+        "fetched_at": raw.get("fetched_at", ""),
+        "is_free": is_free,
+        "is_team": is_team,
         "is_enterprise": is_enterprise,
-        "team_id":      str(team_id),
+        "team_id": str(team_id),
     }
 
 
@@ -733,13 +941,14 @@ class UsageEventsFetcher(QThread):
       "model_usage"  : dict  — {model_name: {"count": int, "cost_cents": float}}
       "total_events" : int   — totalUsageEventsCount from response
     """
+
     ready = pyqtSignal(dict)
     error = pyqtSignal(str)
 
     def __init__(self, start_ms: int, end_ms: int):
         super().__init__()
         self._start_ms = start_ms
-        self._end_ms   = end_ms
+        self._end_ms = end_ms
 
     def run(self):
         try:
@@ -750,12 +959,14 @@ class UsageEventsFetcher(QThread):
             hdrs = api_headers(cookie)
             body = {
                 "startDate": self._start_ms,
-                "endDate":   self._end_ms,
-                "pageSize":  500,
+                "endDate": self._end_ms,
+                "pageSize": 500,
             }
             r = requests.post(
                 f"{BASE_URL}/api/dashboard/get-filtered-usage-events",
-                json=body, headers=hdrs, timeout=30,
+                json=body,
+                headers=hdrs,
+                timeout=30,
             )
             log.info("UsageEventsFetcher → HTTP %s", r.status_code)
             if not r.ok:
@@ -763,7 +974,7 @@ class UsageEventsFetcher(QThread):
                 return
             data = r.json()
             events = data.get("usageEventsDisplay", [])
-            total  = data.get("totalUsageEventsCount", len(events))
+            total = data.get("totalUsageEventsCount", len(events))
             model_agg: dict[str, dict] = {}
             for event in events:
                 model = event.get("model", "").strip()
@@ -775,10 +986,11 @@ class UsageEventsFetcher(QThread):
                     or 0.0
                 )
                 entry = model_agg.setdefault(model, {"count": 0, "cost_cents": 0.0})
-                entry["count"]      += 1
+                entry["count"] += 1
                 entry["cost_cents"] += float(cost)
-            log.info("UsageEventsFetcher done — %d models, %d events",
-                     len(model_agg), total)
+            log.info(
+                "UsageEventsFetcher done — %d models, %d events", len(model_agg), total
+            )
             self.ready.emit({"model_usage": model_agg, "total_events": total})
         except Exception:
             log.exception("UsageEventsFetcher.run")
@@ -793,13 +1005,14 @@ class LeaderboardFetcher(QThread):
       "composer"    : list[dict]  — composer_leaderboard entries sorted by rank
       "total_users" : int
     """
+
     ready = pyqtSignal(dict)
     error = pyqtSignal(str)
 
     def __init__(self, start_ms: int, end_ms: int):
         super().__init__()
         self._start_ms = start_ms
-        self._end_ms   = end_ms
+        self._end_ms = end_ms
 
     def run(self):
         try:
@@ -811,29 +1024,35 @@ class LeaderboardFetcher(QThread):
             body = {"startDate": self._start_ms, "endDate": self._end_ms}
             r = requests.get(
                 f"{BASE_URL}/api/v2/analytics/team/leaderboard",
-                json=body, headers=hdrs, timeout=30,
+                json=body,
+                headers=hdrs,
+                timeout=30,
             )
             log.info("LeaderboardFetcher → HTTP %s", r.status_code)
             if not r.ok:
                 self.error.emit(f"HTTP {r.status_code}: {r.text[:120]}")
                 return
             data = r.json()
-            tab_block      = data.get("tab_leaderboard", {})
+            tab_block = data.get("tab_leaderboard", {})
             composer_block = data.get("composer_leaderboard", {})
-            tab_entries      = sorted(tab_block.get("data", []),
-                                      key=lambda x: x.get("rank", 999))
-            composer_entries = sorted(composer_block.get("data", []),
-                                      key=lambda x: x.get("rank", 999))
+            tab_entries = sorted(
+                tab_block.get("data", []), key=lambda x: x.get("rank", 999)
+            )
+            composer_entries = sorted(
+                composer_block.get("data", []), key=lambda x: x.get("rank", 999)
+            )
             total_users = max(
                 tab_block.get("total_users", 0),
                 composer_block.get("total_users", 0),
             )
             log.info("LeaderboardFetcher done — %d users", total_users)
-            self.ready.emit({
-                "tab":         tab_entries,
-                "composer":    composer_entries,
-                "total_users": total_users,
-            })
+            self.ready.emit(
+                {
+                    "tab": tab_entries,
+                    "composer": composer_entries,
+                    "total_users": total_users,
+                }
+            )
         except Exception:
             log.exception("LeaderboardFetcher.run")
             self.error.emit("Request failed — see log for details.")
@@ -846,8 +1065,20 @@ def usd(cents: int) -> str:
     return f"${cents / 100:.2f}"
 
 
-_MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+_MONTHS_EN = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
 
 
 def fmt_date(iso: str, lang: str) -> str:
@@ -862,37 +1093,53 @@ def fmt_date(iso: str, lang: str) -> str:
 
 def days_left_text(end_iso: str, lang: str) -> str:
     try:
-        end   = _date.fromisoformat(end_iso[:10])
+        end = _date.fromisoformat(end_iso[:10])
         today = _date.today()
         delta = (end - today).days + 1
     except Exception:
         return end_iso
     if lang == "ko":
-        if delta > 1:  return f"{delta}일 남음"
-        if delta == 1: return "내일 갱신"
-        if delta == 0: return "오늘 갱신"
+        if delta > 1:
+            return f"{delta}일 남음"
+        if delta == 1:
+            return "내일 갱신"
+        if delta == 0:
+            return "오늘 갱신"
         return f"D+{abs(delta)}"
     else:
-        if delta > 1:  return f"{delta} days left"
-        if delta == 1: return "Renews tomorrow"
-        if delta == 0: return "Renews today"
+        if delta > 1:
+            return f"{delta} days left"
+        if delta == 1:
+            return "Renews tomorrow"
+        if delta == 0:
+            return "Renews today"
         return f"D+{abs(delta)}"
 
 
 def pct_color(pct: float) -> QColor:
-    if pct >= 90: return c("c_red")
-    if pct >= 75: return c("c_amber")
+    if pct >= 90:
+        return c("c_red")
+    if pct >= 75:
+        return c("c_amber")
     return c("accent")
 
 
 def remain_color(remain_pct: float) -> QColor:
-    if remain_pct <= 25: return c("c_red")
-    if remain_pct <= 50: return c("c_amber")
+    if remain_pct <= 25:
+        return c("c_red")
+    if remain_pct <= 50:
+        return c("c_amber")
     return c("c_green")
 
 
-def ql(text: str = "", size: int = 10, color: QColor = None, bold: bool = False,
-        align=Qt.AlignLeft, family: str = _UI_FONT) -> QLabel:
+def ql(
+    text: str = "",
+    size: int = 10,
+    color: QColor = None,
+    bold: bool = False,
+    align=Qt.AlignLeft,
+    family: str = _UI_FONT,
+) -> QLabel:
     w = QLabel(text)
     f = QFont(family, size)
     f.setBold(bold)
@@ -961,10 +1208,11 @@ def _draw_hatch(p: QPainter, w: float, h: float, step: int = 5):
 # ══════════════════════════════════════════════════════════════
 class ArcGauge(QWidget):
     """Concentric double-semicircle arc gauge with rounded ends."""
+
     _OUTER_SW = 9
     _INNER_SW = 6
-    _GAP      = 5
-    _GLOW_PAD = 22   # increased: prevents glow clipping at arc top
+    _GAP = 5
+    _GLOW_PAD = 22  # increased: prevents glow clipping at arc top
 
     def __init__(self, size: int = 160):
         super().__init__()
@@ -972,17 +1220,18 @@ class ArcGauge(QWidget):
         pad = self._GLOW_PAD
         self.setFixedSize(size + pad * 2, size // 2 + pad + 10)
         self._outer_r = size // 2 - 8
-        self._inner_r = (self._outer_r - self._OUTER_SW // 2
-                         - self._GAP - self._INNER_SW // 2)
-        self._outer_pct   = 0.0
+        self._inner_r = (
+            self._outer_r - self._OUTER_SW // 2 - self._GAP - self._INNER_SW // 2
+        )
+        self._outer_pct = 0.0
         self._outer_color = c("accent")
-        self._inner_pct   = None
+        self._inner_pct = None
         self._inner_color = c("c_amber")
-        self._label_text  = ""
+        self._label_text = ""
         self._label_color = c("accent")
 
     def set_value(self, pct: float, color: QColor = None):
-        self._outer_pct   = max(0.0, min(100.0, pct))
+        self._outer_pct = max(0.0, min(100.0, pct))
         self._outer_color = color or c("accent")
         self.update()
 
@@ -990,18 +1239,17 @@ class ArcGauge(QWidget):
         if pct is None:
             self._inner_pct = None
         else:
-            self._inner_pct   = max(0.0, min(100.0, pct))
+            self._inner_pct = max(0.0, min(100.0, pct))
             self._inner_color = color or c("c_amber")
         self.update()
 
     def resize_arcs(self, outer_r: int):
         self._outer_r = outer_r
-        self._inner_r = (outer_r - self._OUTER_SW // 2
-                         - self._GAP - self._INNER_SW // 2)
+        self._inner_r = outer_r - self._OUTER_SW // 2 - self._GAP - self._INNER_SW // 2
         self.update()
 
     def set_label(self, text: str, color: QColor = None):
-        self._label_text  = text
+        self._label_text = text
         self._label_color = color or c("accent")
         self.update()
 
@@ -1016,7 +1264,9 @@ class ArcGauge(QWidget):
         inner_r = max(1.0, r - sw / 2)
         clip = QPainterPath()
         clip.moveTo(cx - outer_r, cy)
-        clip.arcTo(QRectF(cx - outer_r, cy - outer_r, outer_r * 2, outer_r * 2), 180, -180)
+        clip.arcTo(
+            QRectF(cx - outer_r, cy - outer_r, outer_r * 2, outer_r * 2), 180, -180
+        )
         clip.lineTo(cx + inner_r, cy)
         clip.arcTo(QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2), 0, 180)
         clip.closeSubpath()
@@ -1067,12 +1317,20 @@ class ArcGauge(QWidget):
         cx = w // 2
         cy = h - pad - 6
         self._draw_track(p, cx, cy, self._outer_r, self._OUTER_SW)
-        self._draw_arc(p, cx, cy, self._outer_r, self._OUTER_SW,
-                       self._outer_pct, self._outer_color)
+        self._draw_arc(
+            p, cx, cy, self._outer_r, self._OUTER_SW, self._outer_pct, self._outer_color
+        )
         if self._inner_pct is not None:
             self._draw_track(p, cx, cy, self._inner_r, self._INNER_SW)
-            self._draw_arc(p, cx, cy, self._inner_r, self._INNER_SW,
-                           self._inner_pct, self._inner_color)
+            self._draw_arc(
+                p,
+                cx,
+                cy,
+                self._inner_r,
+                self._INNER_SW,
+                self._inner_pct,
+                self._inner_color,
+            )
         if self._label_text:
             inner_r = self._inner_r if self._inner_pct is not None else self._outer_r
             font_px = max(10, min(22, int(inner_r * 0.52)))
@@ -1134,11 +1392,11 @@ class MiniBar(QWidget):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedHeight(h)
-        self._frac  = 0.0
+        self._frac = 0.0
         self._color = c("accent")
 
     def set_value(self, frac: float, color: QColor = None):
-        self._frac  = max(0.0, min(1.0, frac))
+        self._frac = max(0.0, min(1.0, frac))
         self._color = color or c("accent")
         self.update()
 
@@ -1175,30 +1433,30 @@ class MiniBar(QWidget):
 
 class PieChart(QWidget):
     """Donut pie chart for model usage breakdown."""
+
     _PALETTE = [
-        QColor(91,  141, 239),   # blue
-        QColor(232, 112,  64),   # orange
-        QColor(91,  196, 128),   # green
-        QColor(196,  91, 196),   # purple
-        QColor(232, 192,  64),   # amber
-        QColor( 64, 196, 232),   # cyan
-        QColor(232,  64,  64),   # red
-        QColor( 64, 232, 196),   # teal
+        QColor(91, 141, 239),  # blue
+        QColor(232, 112, 64),  # orange
+        QColor(91, 196, 128),  # green
+        QColor(196, 91, 196),  # purple
+        QColor(232, 192, 64),  # amber
+        QColor(64, 196, 232),  # cyan
+        QColor(232, 64, 64),  # red
+        QColor(64, 232, 196),  # teal
     ]
     SIZE = 104
-    HOLE = 0.54   # donut hole ratio
+    HOLE = 0.54  # donut hole ratio
 
     def __init__(self):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(self.SIZE, self.SIZE)
-        self._fracs:  list[float]  = []
+        self._fracs: list[float] = []
         self._colors: list[QColor] = []
-        self._center: str          = ""
+        self._center: str = ""
 
-    def set_data(self, fracs: list[float], colors: list[QColor],
-                 center: str = ""):
-        self._fracs  = fracs
+    def set_data(self, fracs: list[float], colors: list[QColor], center: str = ""):
+        self._fracs = fracs
         self._colors = colors
         self._center = center
         self.update()
@@ -1209,20 +1467,19 @@ class PieChart(QWidget):
         w, h = self.width(), self.height()
         m = 4
         rect = QRectF(m, m, w - 2 * m, h - 2 * m)
-        start = 90 * 16            # top, clockwise
+        start = 90 * 16  # top, clockwise
         for frac, col in zip(self._fracs, self._colors):
-            span = max(16, int(frac * 360 * 16))   # positive, min 1°
+            span = max(16, int(frac * 360 * 16))  # positive, min 1°
             p.setBrush(QBrush(col))
             p.setPen(Qt.NoPen)
-            p.drawPie(rect, start, -span)           # negative = clockwise
+            p.drawPie(rect, start, -span)  # negative = clockwise
             start -= span
         # donut hole
         hole_r = (w - 2 * m) * self.HOLE / 2
         cx, cy = w / 2.0, h / 2.0
         p.setBrush(QBrush(c("bg_card")))
         p.setPen(Qt.NoPen)
-        p.drawEllipse(QRectF(cx - hole_r, cy - hole_r,
-                             hole_r * 2, hole_r * 2))
+        p.drawEllipse(QRectF(cx - hole_r, cy - hole_r, hole_r * 2, hole_r * 2))
         # center label
         if self._center:
             p.setPen(QPen(c("t_bright")))
@@ -1231,9 +1488,11 @@ class PieChart(QWidget):
             f.setPixelSize(8)
             f.setBold(True)
             p.setFont(f)
-            p.drawText(QRectF(cx - hole_r, cy - hole_r,
-                              hole_r * 2, hole_r * 2),
-                       Qt.AlignCenter, self._center)
+            p.drawText(
+                QRectF(cx - hole_r, cy - hole_r, hole_r * 2, hole_r * 2),
+                Qt.AlignCenter,
+                self._center,
+            )
         p.end()
 
 
@@ -1254,8 +1513,10 @@ class Card(QWidget):
         pen = QPen(ac, 1.5)
         pen.setCapStyle(Qt.RoundCap)
         p.setPen(pen)
-        p.drawLine(QPointF(r.left() + 14, r.top() + 0.75),
-                   QPointF(r.left() + 56, r.top() + 0.75))
+        p.drawLine(
+            QPointF(r.left() + 14, r.top() + 0.75),
+            QPointF(r.left() + 56, r.top() + 0.75),
+        )
         p.end()
 
 
@@ -1279,7 +1540,7 @@ class ToggleSwitch(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(self.W, self.H)
         self.setCursor(Qt.PointingHandCursor)
-        self._checked  = checked
+        self._checked = checked
         self._disabled = False
 
     def is_checked(self) -> bool:
@@ -1445,8 +1706,11 @@ class DebugDialog(QDialog):
                 json_display["profile"] = safe_profile
             if "email" in json_display:
                 json_display["email"] = "[REDACTED]"
-        json_str = (json.dumps(json_display, indent=2, ensure_ascii=False)
-                    if json_display else "(no data yet)")
+        json_str = (
+            json.dumps(json_display, indent=2, ensure_ascii=False)
+            if json_display
+            else "(no data yet)"
+        )
         self._json_txt = _make_text(json_str)
         tabs.addTab(self._json_txt, "JSON")
 
@@ -1479,12 +1743,12 @@ class DebugDialog(QDialog):
 #  PAGE: CREDITS
 # ══════════════════════════════════════════════════════════════
 class CreditsPage(QWidget):
-    retry_clicked     = pyqtSignal()
+    retry_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.settings  = settings
+        self.settings = settings
         self._row_refs: dict[str, KVRow] = {}
         self._last_data: dict | None = None
         self._build()
@@ -1559,7 +1823,7 @@ class CreditsPage(QWidget):
         il.setSpacing(2)
         il.setAlignment(Qt.AlignVCenter)
         self._hero_used = ql("$—", 11, c("t_bright"), bold=True)
-        self._hero_of   = ql("/ $—", 9, c("t_muted"))
+        self._hero_of = ql("/ $—", 9, c("t_muted"))
         self._cycle_lbl = ql("", 8, c("t_dim"))
         for _lbl in [self._hero_used, self._hero_of, self._cycle_lbl]:
             _lbl.setWordWrap(False)
@@ -1585,7 +1849,7 @@ class CreditsPage(QWidget):
         self._hdr_personal = section_hdr(self.T("personal_section"), "accent")
         pl.addWidget(self._hdr_personal)
         pl.addWidget(Divider())
-        self._row_refs["row_incl"]  = kv_row(pl, self.T("row_incl"))
+        self._row_refs["row_incl"] = kv_row(pl, self.T("row_incl"))
         self._row_refs["row_bonus"] = kv_row(pl, self.T("row_bonus"))
         self._row_refs["row_extra"] = kv_row(pl, self.T("row_extra"))
         vl.addWidget(pc)
@@ -1635,17 +1899,17 @@ class CreditsPage(QWidget):
         vl.addWidget(self._rate_card)
 
     def _rebuild_labels(self):
-        update_kv_label(self._row_refs["row_incl"],  self.T("row_incl"))
+        update_kv_label(self._row_refs["row_incl"], self.T("row_incl"))
         update_kv_label(self._row_refs["row_bonus"], self.T("row_bonus"))
         update_kv_label(self._row_refs["row_extra"], self.T("row_extra"))
-        update_kv_label(self._row_refs["od_t"],      self.T("org_od"))
-        update_kv_label(self._row_refs["auto_pct"],  self.T("auto_pct"))
-        update_kv_label(self._row_refs["api_pct"],   self.T("api_pct"))
+        update_kv_label(self._row_refs["od_t"], self.T("org_od"))
+        update_kv_label(self._row_refs["auto_pct"], self.T("auto_pct"))
+        update_kv_label(self._row_refs["api_pct"], self.T("api_pct"))
         self._hdr_personal.setText(self.T("personal_section").upper())
         self._hdr_org.setText(self.T("org_section").upper())
         set_lbl_color(self._hdr_personal, c("accent"))
-        set_lbl_color(self._hdr_org,      c("c_green"))
-        set_lbl_color(self._hdr_rates,    c("accent2"))
+        set_lbl_color(self._hdr_org, c("c_green"))
+        set_lbl_color(self._hdr_rates, c("accent2"))
         self._retry_btn.setText(self.T("err_retry"))
 
     @staticmethod
@@ -1672,11 +1936,11 @@ class CreditsPage(QWidget):
         set_lbl_color(self._free_notice_lbl, c("t_muted"))
         self._arc.set_label(self._arc._label_text, c("accent"))
         set_lbl_color(self._hero_used, c("t_bright"))
-        set_lbl_color(self._hero_of,   c("t_muted"))
+        set_lbl_color(self._hero_of, c("t_muted"))
         set_lbl_color(self._cycle_lbl, c("t_dim"))
         set_lbl_color(self._hdr_personal, c("accent"))
-        set_lbl_color(self._hdr_org,      c("c_green"))
-        set_lbl_color(self._hdr_rates,    c("accent2"))
+        set_lbl_color(self._hdr_org, c("c_green"))
+        set_lbl_color(self._hdr_rates, c("accent2"))
         for row in self._row_refs.values():
             lw, vw = row
             set_lbl_color(lw, c("t_muted"))
@@ -1750,8 +2014,8 @@ class CreditsPage(QWidget):
         #   Phase 2: base exhausted + bonus active  → amber, BONUS label
         #   Phase 1: base credits remaining          → normal % display
         base_exhausted = incl_remain_pct <= 0
-        bonus_active   = bonus_used > 0
-        od_active      = od["personal"] > 0
+        bonus_active = bonus_used > 0
+        od_active = od["personal"] > 0
 
         if base_exhausted and od_active:
             # Phase 3: On-Demand — real charges, highest priority
@@ -1793,17 +2057,17 @@ class CreditsPage(QWidget):
             self._bonus_tag.setVisible(False)
         self._arc.set_bonus(None)
 
-        active_incl  = cr["incl_remain"] > 0
-        active_bonus = cr["bonus_used"]  > 0
-        active_od    = od["personal"]    > 0
+        active_incl = cr["incl_remain"] > 0
+        active_bonus = cr["bonus_used"] > 0
+        active_od = od["personal"] > 0
         if active_od:
-            badge_text  = self.T("status_badge_od")
+            badge_text = self.T("status_badge_od")
             badge_color = c("c_red")
         elif active_bonus:
-            badge_text  = self.T("status_badge_bonus")
+            badge_text = self.T("status_badge_bonus")
             badge_color = c("c_amber")
         else:
-            badge_text  = self.T("status_badge_incl")
+            badge_text = self.T("status_badge_incl")
             badge_color = c("accent")
         self._status_badge.setText(f"● {badge_text}")
         self._status_badge.setStyleSheet(
@@ -1814,22 +2078,30 @@ class CreditsPage(QWidget):
         show_personal = cfg.get("show_personal", True)
         self._personal_card.setVisible(show_personal)
         if show_personal:
-            set_kv(self._row_refs["row_incl"],
-                   usd(cr["incl_used"]),
-                   c("accent") if active_incl else c("t_muted"))
-            set_kv(self._row_refs["row_bonus"],
-                   usd(cr["bonus_used"]) if cr["bonus_used"] > 0 else self.T("not_used"),
-                   c("c_amber") if active_bonus else c("t_dim"))
-            set_kv(self._row_refs["row_extra"],
-                   usd(od["personal"]) if od["personal"] > 0 else self.T("not_used"),
-                   c("c_red") if active_od else c("t_dim"))
+            set_kv(
+                self._row_refs["row_incl"],
+                usd(cr["incl_used"]),
+                c("accent") if active_incl else c("t_muted"),
+            )
+            set_kv(
+                self._row_refs["row_bonus"],
+                usd(cr["bonus_used"]) if cr["bonus_used"] > 0 else self.T("not_used"),
+                c("c_amber") if active_bonus else c("t_dim"),
+            )
+            set_kv(
+                self._row_refs["row_extra"],
+                usd(od["personal"]) if od["personal"] > 0 else self.T("not_used"),
+                c("c_red") if active_od else c("t_dim"),
+            )
 
         show_org = cfg.get("show_org", True)
         self._org_card.setVisible(show_org)
         if show_org:
-            set_kv(self._row_refs["od_t"],
-                   usd(od["team"]) if od["team"] else "—",
-                   c("c_amber") if od["team"] > 0 else c("t_muted"))
+            set_kv(
+                self._row_refs["od_t"],
+                usd(od["team"]) if od["team"] else "—",
+                c("c_amber") if od["team"] > 0 else c("t_muted"),
+            )
 
         show_rate = cfg.get("show_official", True)
         self._rate_card.setVisible(show_rate)
@@ -1878,9 +2150,13 @@ class ProfilePage(QWidget):
         cl.addWidget(self._hdr_profile)
         cl.addWidget(Divider())
         for key, lk in [
-            ("name", "field_name"), ("email", "field_email"),
-            ("verified", "field_verified"), ("since", "field_since"),
-            ("days", "field_days"), ("plan", "field_plan"), ("cycle", "field_cycle"),
+            ("name", "field_name"),
+            ("email", "field_email"),
+            ("verified", "field_verified"),
+            ("since", "field_since"),
+            ("days", "field_days"),
+            ("plan", "field_plan"),
+            ("cycle", "field_cycle"),
         ]:
             self._rows[key] = kv_row(cl, self.T(lk))
         vl.addWidget(card)
@@ -1890,9 +2166,13 @@ class ProfilePage(QWidget):
         self._hdr_profile.setText(self.T("profile_title").upper())
         set_lbl_color(self._hdr_profile, c("c_green"))
         for key, lk in [
-            ("name", "field_name"), ("email", "field_email"),
-            ("verified", "field_verified"), ("since", "field_since"),
-            ("days", "field_days"), ("plan", "field_plan"), ("cycle", "field_cycle"),
+            ("name", "field_name"),
+            ("email", "field_email"),
+            ("verified", "field_verified"),
+            ("since", "field_since"),
+            ("days", "field_days"),
+            ("plan", "field_plan"),
+            ("cycle", "field_cycle"),
         ]:
             update_kv_label(self._rows[key], self.T(lk))
 
@@ -1916,13 +2196,19 @@ class ProfilePage(QWidget):
 
         sv("name", pr["name"] or "—")
         sv("email", pr["email"] or "—")
-        sv("verified",
-           self.T("verified_yes") if pr["verified"] else self.T("verified_no"),
-           c("c_green") if pr["verified"] else c("c_red"))
+        sv(
+            "verified",
+            self.T("verified_yes") if pr["verified"] else self.T("verified_no"),
+            c("c_green") if pr["verified"] else c("c_red"),
+        )
         sv("since", pr["created_at"] or "—")
-        sv("days",
-           f"{pr['days_member']} {self.T('member_days')}" if pr["days_member"] else "—",
-           c("t_muted"))
+        sv(
+            "days",
+            f"{pr['days_member']} {self.T('member_days')}"
+            if pr["days_member"]
+            else "—",
+            c("t_muted"),
+        )
         sv("plan", f"{cyc['membership']} / {cyc['limit_type']}")
         sv("cycle", f"{cyc['start']}  →  {cyc['end']}")
 
@@ -1931,19 +2217,19 @@ class ProfilePage(QWidget):
 #  PAGE: SETTINGS
 # ══════════════════════════════════════════════════════════════
 class SettingsPage(QWidget):
-    changed              = pyqtSignal()
+    changed = pyqtSignal()
     height_adjust_needed = pyqtSignal()
-    theme_changed        = pyqtSignal(str)
-    pin_changed          = pyqtSignal(bool)
+    theme_changed = pyqtSignal(str)
+    pin_changed = pyqtSignal(bool)
 
-    TOGGLES_PIN  = [("pin_on_top", "pin_top")]
-    STARTUP_KEY  = "startup_boot"
+    TOGGLES_PIN = [("pin_on_top", "pin_top")]
+    STARTUP_KEY = "startup_boot"
     THEMES_ORDER = [
-        ("light",    "theme_light"),
-        ("dark",     "theme_dark"),
+        ("light", "theme_light"),
+        ("dark", "theme_dark"),
         ("midnight", "theme_midnight"),
-        ("matrix",   "theme_matrix"),
-        ("native",   "theme_native"),
+        ("matrix", "theme_matrix"),
+        ("native", "theme_native"),
     ]
 
     def __init__(self, settings: dict):
@@ -1976,11 +2262,13 @@ class SettingsPage(QWidget):
         hdr_hl.addWidget(self._ver_lbl, 0)
         self._gh_lbl = QLabel(
             '<a href="https://github.com/soki1229/cursor-hud"'
-            ' style="color:inherit;text-decoration:none;">GitHub ↗</a>')
+            ' style="color:inherit;text-decoration:none;">GitHub ↗</a>'
+        )
         self._gh_lbl.setOpenExternalLinks(True)
         self._gh_lbl.setStyleSheet(
             f"font-size:8px;font-family:{_UI_FONT};"
-            f"color:{c('t_muted').name()};background:transparent;")
+            f"color:{c('t_muted').name()};background:transparent;"
+        )
         hdr_hl.addWidget(self._gh_lbl, 0)
         cl.addWidget(hdr_row)
         cl.addWidget(Divider())
@@ -2040,7 +2328,8 @@ class SettingsPage(QWidget):
             ("show_official", "show_official"),
         ]:
             row, lbl, sw = self._switch_row(
-                self.T(skey), key, self.settings.get(key, True))
+                self.T(skey), key, self.settings.get(key, True)
+            )
             cl.addWidget(row)
             self._t[skey] = lbl
             self._sw_refs[key] = (row, lbl, sw)
@@ -2048,27 +2337,31 @@ class SettingsPage(QWidget):
 
         # System options
         row, lbl, sw = self._switch_row(
-            self.T("pin_top"), "pin_on_top", self.settings.get("pin_on_top", True))
+            self.T("pin_top"), "pin_on_top", self.settings.get("pin_on_top", True)
+        )
         cl.addWidget(row)
         self._t["pin_top"] = lbl
         self._sw_refs["pin_on_top"] = (row, lbl, sw)
 
         row, lbl, _ = self._switch_row(
-            self.T("startup_boot"), "_startup", self._is_startup_registered())
+            self.T("startup_boot"), "_startup", self._is_startup_registered()
+        )
         cl.addWidget(row)
         self._t["startup_boot"] = lbl
         cl.addWidget(Divider())
 
         # ── Experimental section ──────────────────────────────────
         self._t["experimental_section"] = ql(
-            f"⚗  {self.T('experimental_section')}", 9, c("t_muted"))
+            f"⚗  {self.T('experimental_section')}", 9, c("t_muted")
+        )
         cl.addWidget(self._t["experimental_section"])
         self._t["experimental_hint"] = ql(self.T("experimental_hint"), 8, c("t_dim"))
         cl.addWidget(self._t["experimental_hint"])
         cl.addWidget(Divider())
 
         row_exp, lbl_exp, sw_exp = self._switch_row(
-            self.T("experimental_toggle"), "show_experimental",
+            self.T("experimental_toggle"),
+            "show_experimental",
             self.settings.get("show_experimental", False),
         )
         cl.addWidget(row_exp)
@@ -2098,7 +2391,7 @@ class SettingsPage(QWidget):
             if not widget:
                 continue
             if key.startswith("lang_") and key != "lang_label":
-                lang_code = key[len("lang_"):]
+                lang_code = key[len("lang_") :]
                 widget.setText(self.T(key))
                 widget.setChecked(self.settings.get("lang", "en") == lang_code)
             elif key.startswith("theme_"):
@@ -2108,10 +2401,12 @@ class SettingsPage(QWidget):
                     widget.setText(self.T(tkey))
             else:
                 widget.setText(
-                    self.T(key).upper() if key == "settings_title" else self.T(key))
+                    self.T(key).upper() if key == "settings_title" else self.T(key)
+                )
 
-    def _switch_row(self, label: str, key: str, enabled: bool,
-                    indent: bool = False) -> tuple:
+    def _switch_row(
+        self, label: str, key: str, enabled: bool, indent: bool = False
+    ) -> tuple:
         rw = QWidget()
         rw.setAttribute(Qt.WA_TranslucentBackground)
         rw.setCursor(Qt.PointingHandCursor)  # entire row is clickable
@@ -2131,6 +2426,7 @@ class SettingsPage(QWidget):
         # Make the entire row clickable (toggle the switch)
         def _row_click(event, _sw=sw):
             _sw.toggle()
+
         rw.mousePressEvent = _row_click
 
         return rw, lbl, sw
@@ -2139,9 +2435,11 @@ class SettingsPage(QWidget):
         _metrics.inc(f"toggle_{key}")
         if key == "_startup":
             if value:
-                exe = str(Path(
-                    sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
-                ).resolve())
+                exe = str(
+                    Path(
+                        sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
+                    ).resolve()
+                )
                 register_startup(exe)
             else:
                 unregister_startup()
@@ -2166,10 +2464,13 @@ class SettingsPage(QWidget):
         if sys.platform == "win32":
             try:
                 import winreg
+
                 k = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Run",
-                    0, winreg.KEY_READ)
+                    0,
+                    winreg.KEY_READ,
+                )
                 winreg.QueryValueEx(k, "CursorHUD")
                 winreg.CloseKey(k)
                 return True
@@ -2199,7 +2500,8 @@ class SettingsPage(QWidget):
         if hasattr(self, "_gh_lbl"):
             self._gh_lbl.setStyleSheet(
                 f"font-size:8px;font-family:{_UI_FONT};"
-                f"color:{c('t_muted').name()};background:transparent;")
+                f"color:{c('t_muted').name()};background:transparent;"
+            )
         for key in ("lang_label", "theme_label", "show_sections"):
             lbl = self._t.get(key)
             if lbl:
@@ -2251,7 +2553,7 @@ class SettingsPage(QWidget):
 # ══════════════════════════════════════════════════════════════
 class StatusBar(QWidget):
     refresh_clicked = pyqtSignal()
-    debug_clicked   = pyqtSignal()
+    debug_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
         super().__init__()
@@ -2264,7 +2566,8 @@ class StatusBar(QWidget):
 
         self._dot = QLabel("●")
         self._dot.setStyleSheet(
-            f"color:{c('t_muted').name()};font-size:8px;background:transparent;")
+            f"color:{c('t_muted').name()};font-size:8px;background:transparent;"
+        )
         self._dot.setFixedWidth(12)
         hl.addWidget(self._dot)
         self._last_state = "ok"
@@ -2272,14 +2575,16 @@ class StatusBar(QWidget):
         self._clock_lbl = QLabel("—")
         self._clock_lbl.setStyleSheet(
             f"color:{c('t_muted').name()};font-size:9px;"
-            f"background:transparent;font-family:{_MONO_FONT};")
+            f"background:transparent;font-family:{_MONO_FONT};"
+        )
         hl.addWidget(self._clock_lbl)
         hl.addStretch()
 
         self._cd_lbl = QLabel("")
         self._cd_lbl.setStyleSheet(
             f"color:{c('t_dim').name()};font-size:8px;"
-            f"background:transparent;font-family:{_UI_FONT};")
+            f"background:transparent;font-family:{_UI_FONT};"
+        )
         hl.addWidget(self._cd_lbl)
 
         self._dbg_btn = QPushButton(S(settings, "debug_btn"))
@@ -2310,8 +2615,10 @@ class StatusBar(QWidget):
     def set_status(self, state: str):
         self._last_state = state
         col_map = {
-            "ok": c("c_green"), "loading": c("c_amber"),
-            "error": c("c_red"), "mock": c("accent2"),
+            "ok": c("c_green"),
+            "loading": c("c_amber"),
+            "error": c("c_red"),
+            "mock": c("accent2"),
         }
         col = col_map.get(state, c("t_muted"))
         is_mock = state == "mock"
@@ -2319,7 +2626,8 @@ class StatusBar(QWidget):
         self._dot.setStyleSheet(
             f"color:rgba({col.red()},{col.green()},{col.blue()},255);"
             f"font-size:8px;font-weight:{'700' if is_mock else '400'};"
-            "background:transparent;")
+            "background:transparent;"
+        )
         # Refresh button: show spinner text while loading
         if state == "loading":
             self._rbtn.setText("…")
@@ -2331,7 +2639,8 @@ class StatusBar(QWidget):
 
     def set_countdown(self, secs: int):
         self._cd_lbl.setText(
-            f"{S(self.settings, 'next_refresh')} {secs}{S(self.settings, 'seconds')}")
+            f"{S(self.settings, 'next_refresh')} {secs}{S(self.settings, 'seconds')}"
+        )
 
     def refresh_labels(self):
         self._dbg_btn.setText(S(self.settings, "debug_btn"))
@@ -2340,10 +2649,12 @@ class StatusBar(QWidget):
         self.set_status(self._last_state)
         self._clock_lbl.setStyleSheet(
             f"color:{c('t_muted').name()};font-size:9px;"
-            f"background:transparent;font-family:{_MONO_FONT};")
+            f"background:transparent;font-family:{_MONO_FONT};"
+        )
         self._cd_lbl.setStyleSheet(
             f"color:{c('t_dim').name()};font-size:8px;"
-            f"background:transparent;font-family:{_UI_FONT};")
+            f"background:transparent;font-family:{_UI_FONT};"
+        )
         mu = c("t_dim").name()
         self._dbg_btn.setStyleSheet(
             f"QPushButton{{ color:{mu}; background:transparent;"
@@ -2370,6 +2681,7 @@ class AnalyticsPage(QWidget):
       section_hdr("TEAM SPEND") + scrollable member rows
       section_hdr("MODEL USAGE") + model rows with progress bars
     """
+
     refresh_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
@@ -2443,9 +2755,10 @@ class AnalyticsPage(QWidget):
     def set_cycle_label(self, start: str, end: str):
         """Set billing cycle label. start/end are YYYY-MM-DD strings."""
         self._cycle_start = start
-        self._cycle_end   = end
+        self._cycle_end = end
         self._cycle_lbl.setText(
-            f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}")
+            f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}"
+        )
 
     def update_data(self, data: dict):
         """Populate model usage section from UsageEventsFetcher ready() payload."""
@@ -2458,7 +2771,8 @@ class AnalyticsPage(QWidget):
             return
         lang = self.settings.get("lang", "en")
         tmpl = STRINGS.get(lang, STRINGS["en"]).get(
-            "analytics_events_badge", "{n} events")
+            "analytics_events_badge", "{n} events"
+        )
         badge = tmpl.replace("{n}", str(total_events))
         existing = self._cycle_lbl.text()
         if badge not in existing:
@@ -2484,11 +2798,12 @@ class AnalyticsPage(QWidget):
             self._model_container.hide()
             return
 
-        sorted_models = sorted(model_agg.items(),
-                               key=lambda x: x[1]["cost_cents"], reverse=True)
+        sorted_models = sorted(
+            model_agg.items(), key=lambda x: x[1]["cost_cents"], reverse=True
+        )
         palette = PieChart._PALETTE
-        colors  = [palette[i % len(palette)] for i in range(len(sorted_models))]
-        fracs   = [e["cost_cents"] / total_cents for _, e in sorted_models]
+        colors = [palette[i % len(palette)] for i in range(len(sorted_models))]
+        fracs = [e["cost_cents"] / total_cents for _, e in sorted_models]
 
         # ── Pie chart (centered) ────────────────────────────────
         pie_row = QWidget()
@@ -2516,8 +2831,7 @@ class AnalyticsPage(QWidget):
             # color swatch
             swatch = QLabel()
             swatch.setFixedSize(8, 8)
-            swatch.setStyleSheet(
-                f"background:{col.name()};border-radius:2px;")
+            swatch.setStyleSheet(f"background:{col.name()};border-radius:2px;")
             rl.addWidget(swatch, 0)
 
             name_lbl = ql(model_name, 8, c("t_body"))
@@ -2544,8 +2858,8 @@ class AnalyticsPage(QWidget):
         set_lbl_color(self._cycle_lbl, c("t_dim"))
         set_lbl_color(self._model_status, c("t_dim"))
         self._hdr_model.setStyleSheet(
-            ql("", 8, c("accent"), bold=True).styleSheet()
-            + "letter-spacing:1.5px;")
+            ql("", 8, c("accent"), bold=True).styleSheet() + "letter-spacing:1.5px;"
+        )
 
     def refresh_labels(self):
         self._refresh_btn.setText(S(self.settings, "analytics_refresh"))
@@ -2553,7 +2867,8 @@ class AnalyticsPage(QWidget):
         if hasattr(self, "_cycle_start"):
             self._cycle_lbl.setText(
                 f"{S(self.settings, 'analytics_cycle_label')}: "
-                f"{self._cycle_start} – {self._cycle_end}")
+                f"{self._cycle_start} – {self._cycle_end}"
+            )
 
     def _apply_btn_style(self):
         ac = c("accent").name()
@@ -2577,6 +2892,7 @@ class LeaderboardPage(QWidget):
       Toggle row: [Tab] [Composer] sub-view selector
       Content: QStackedWidget — tab_view | composer_view
     """
+
     refresh_clicked = pyqtSignal()
 
     def __init__(self, settings: dict):
@@ -2645,9 +2961,9 @@ class LeaderboardPage(QWidget):
         # Sub-views (stacked)
         self._sub_stack = QStackedWidget()
         self._sub_stack.setAttribute(Qt.WA_TranslucentBackground)
-        self._tab_view      = QWidget()
+        self._tab_view = QWidget()
         self._tab_view.setAttribute(Qt.WA_TranslucentBackground)
-        self._tab_vbox      = QVBoxLayout(self._tab_view)
+        self._tab_vbox = QVBoxLayout(self._tab_view)
         self._tab_vbox.setContentsMargins(0, 0, 0, 0)
         self._tab_vbox.setSpacing(2)
         self._composer_view = QWidget()
@@ -2655,7 +2971,7 @@ class LeaderboardPage(QWidget):
         self._composer_vbox = QVBoxLayout(self._composer_view)
         self._composer_vbox.setContentsMargins(0, 0, 0, 0)
         self._composer_vbox.setSpacing(2)
-        self._sub_stack.addWidget(self._tab_view)       # index 0
+        self._sub_stack.addWidget(self._tab_view)  # index 0
         self._sub_stack.addWidget(self._composer_view)  # index 1
         content_vl.addWidget(self._sub_stack)
 
@@ -2690,19 +3006,19 @@ class LeaderboardPage(QWidget):
         self._content.hide()
 
     def show_error(self, msg: str):
-        self._status_lbl.setText(
-            f"{S(self.settings, 'leaderboard_error')}: {msg}")
+        self._status_lbl.setText(f"{S(self.settings, 'leaderboard_error')}: {msg}")
         self._status_lbl.show()
         self._content.hide()
 
     def set_cycle_label(self, start: str, end: str):
         self._cycle_start = start
-        self._cycle_end   = end
+        self._cycle_end = end
         n_members = getattr(self, "_total_users", 0)
         members_str = S(self.settings, "leaderboard_members")
         badge = f"{n_members} {members_str}  ·  " if n_members else ""
         self._cycle_lbl.setText(
-            f"{badge}{S(self.settings, 'leaderboard_cycle_label')}: {start} – {end}")
+            f"{badge}{S(self.settings, 'leaderboard_cycle_label')}: {start} – {end}"
+        )
 
     def update_data(self, data: dict):
         self._total_users = data.get("total_users", 0)
@@ -2760,8 +3076,15 @@ class LeaderboardPage(QWidget):
             zero_activity=zero_activity,
         )
 
-    def _make_row(self, rank: int, name: str, accepts: int,
-                  ratio: float, model: str, zero_activity: bool) -> QWidget:
+    def _make_row(
+        self,
+        rank: int,
+        name: str,
+        accepts: int,
+        ratio: float,
+        model: str,
+        zero_activity: bool,
+    ) -> QWidget:
         row = QWidget()
         row.setAttribute(Qt.WA_TranslucentBackground)
         rl = QHBoxLayout(row)
@@ -2772,8 +3095,9 @@ class LeaderboardPage(QWidget):
 
         def dim(col: QColor) -> QColor:
             if zero_activity:
-                return QColor(col.red(), col.green(), col.blue(),
-                              int(col.alpha() * opacity))
+                return QColor(
+                    col.red(), col.green(), col.blue(), int(col.alpha() * opacity)
+                )
             return col
 
         rank_lbl = ql(f"#{rank}", 8, dim(c("t_dim")))
@@ -2807,13 +3131,14 @@ class LeaderboardPage(QWidget):
 
     def refresh_theme(self):
         self._apply_styles()
-        set_lbl_color(self._cycle_lbl,  c("t_dim"))
+        set_lbl_color(self._cycle_lbl, c("t_dim"))
         set_lbl_color(self._status_lbl, c("t_dim"))
         ac = c("accent").name()
         self._hdr_lbl.setStyleSheet(
             f"color:{ac};font-size:8px;font-weight:700;"
             f"font-family:{_UI_FONT};background:transparent;"
-            "letter-spacing:1.5px;")
+            "letter-spacing:1.5px;"
+        )
 
     def refresh_labels(self):
         self._refresh_btn.setText(S(self.settings, "leaderboard_refresh"))
@@ -2844,9 +3169,15 @@ class LeaderboardPage(QWidget):
 # ══════════════════════════════════════════════════════════════
 class NavBar(QWidget):
     tab_clicked = pyqtSignal(int)
-    TABS = ["nav_credit", "nav_analytics", "nav_leaderboard", "nav_profile", "nav_settings"]
-    ANALYTICS_IDX    = 1
-    LEADERBOARD_IDX  = 2
+    TABS = [
+        "nav_credit",
+        "nav_analytics",
+        "nav_leaderboard",
+        "nav_profile",
+        "nav_settings",
+    ]
+    ANALYTICS_IDX = 1
+    LEADERBOARD_IDX = 2
 
     def __init__(self, settings: dict):
         super().__init__()
@@ -2911,8 +3242,8 @@ class ResizeGrip(QWidget):
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(Qt.SizeFDiagCursor)
         self._dragging = False
-        self._start_x  = None
-        self._start_w  = None
+        self._start_x = None
+        self._start_w = None
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -2973,35 +3304,40 @@ class HUDWindow(QMainWindow):
 
     def sizeHint(self):
         return QSize(
-            getattr(self, "_cur_win_w", WIN_W),
-            getattr(self, "_target_h", WIN_H))
+            getattr(self, "_cur_win_w", WIN_W), getattr(self, "_target_h", WIN_H)
+        )
 
-    def __init__(self, mock_file: str | None = None):
+    def __init__(self, mock_file: Optional[str] = None):
         super().__init__()
         self.setWindowTitle("Cursor HUD")
         self._mock_file = mock_file
-        self.settings   = load_settings()
+        self.settings = load_settings()
         apply_theme(self.settings.get("theme", "light"))
         self._pin_on_top = self.settings.get("pin_on_top", True)
-        self._mini_mode  = False
+        self._mini_mode = False
         flags = Qt.FramelessWindowHint
         if self._pin_on_top:
             flags |= Qt.WindowStaysOnTopHint
         self.setWindowFlags(flags)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self._drag_pos       = None
-        self._fetcher        = None
-        self._last_data      = None
-        self._last_raw       = None
+        self._drag_pos = None
+        self._fetcher = None
+        self._last_data = None
+        self._last_raw = None
         self._current_screen = None
-        self._cur_win_w      = WIN_W
-        self._target_h       = WIN_H
-        self._height_timer   = QTimer(self)
+        self._cur_win_w = WIN_W
+        self._target_h = WIN_H
+        self._height_timer = QTimer(self)
         self._height_timer.setSingleShot(True)
         self._height_timer.timeout.connect(self._do_adjust_height)
-        self._countdown      = REFRESH_MS // 1000
-        self._tray           = None
+        self._countdown = REFRESH_MS // 1000
+        self._tray = None
         self._apply_size(QApplication.primaryScreen())
+
+        # Setup height animation
+        self._height_anim = QPropertyAnimation(self, b"size")
+        self._height_anim.setDuration(350)
+        self._height_anim.setEasingCurve(QEasingCurve.OutCubic)
 
         geo = QApplication.primaryScreen().availableGeometry()
         saved_x = self.settings.get("win_x")
@@ -3019,6 +3355,12 @@ class HUDWindow(QMainWindow):
         self._setup_timers()
         if self._mini_mode:
             self._apply_mini()
+
+        # Try to load from cache immediately for instant UI
+        cached = load_cache()
+        if cached:
+            self._on_data(cached, from_cache=True)
+
         self._fetch()
 
     # ── System tray ───────────────────────────────────────────
@@ -3090,36 +3432,42 @@ class HUDWindow(QMainWindow):
 
     def _clamp_to_screen(self, screen: "QScreen") -> None:
         """Slide window back on-screen if any part is clipped after a resize."""
-        avail    = screen.availableGeometry()
-        r        = self.frameGeometry()
-        a_right  = avail.left() + avail.width()
-        a_bottom = avail.top()  + avail.height()
+        avail = screen.availableGeometry()
+        r = self.frameGeometry()
+        a_right = avail.left() + avail.width()
+        a_bottom = avail.top() + avail.height()
         x_lo = avail.left()
-        x_hi = max(avail.left(), a_right  - r.width())
+        x_hi = max(avail.left(), a_right - r.width())
         y_lo = avail.top()
-        y_hi = max(avail.top(),  a_bottom - r.height())
-        nx   = max(x_lo, min(r.x(), x_hi))
-        ny   = max(y_lo, min(r.y(), y_hi))
+        y_hi = max(avail.top(), a_bottom - r.height())
+        nx = max(x_lo, min(r.x(), x_hi))
+        ny = max(y_lo, min(r.y(), y_hi))
         if nx != r.x() or ny != r.y():
             self.move(nx, ny)
 
     def _snap_to_edge(self) -> None:
         """Snap window to nearest screen edge when within SNAP_PX pixels."""
-        screen   = get_screen_for_pos(self.geometry().center())
-        avail    = screen.availableGeometry()
-        r        = self.frameGeometry()
-        a_right  = avail.left() + avail.width()
-        a_bottom = avail.top()  + avail.height()
-        r_right  = r.left() + r.width()
-        r_bottom = r.top()  + r.height()
+        screen = get_screen_for_pos(self.geometry().center())
+        avail = screen.availableGeometry()
+        r = self.frameGeometry()
+        a_right = avail.left() + avail.width()
+        a_bottom = avail.top() + avail.height()
+        r_right = r.left() + r.width()
+        r_bottom = r.top() + r.height()
         # X axis
-        if   abs(r.left()  - avail.left()) <= SNAP_PX:  nx = avail.left()
-        elif abs(r_right   - a_right)      <= SNAP_PX:  nx = a_right - r.width()
-        else:                                            nx = r.left()
+        if abs(r.left() - avail.left()) <= SNAP_PX:
+            nx = avail.left()
+        elif abs(r_right - a_right) <= SNAP_PX:
+            nx = a_right - r.width()
+        else:
+            nx = r.left()
         # Y axis
-        if   abs(r.top()   - avail.top())  <= SNAP_PX:  ny = avail.top()
-        elif abs(r_bottom  - a_bottom)     <= SNAP_PX:  ny = a_bottom - r.height()
-        else:                                            ny = r.top()
+        if abs(r.top() - avail.top()) <= SNAP_PX:
+            ny = avail.top()
+        elif abs(r_bottom - a_bottom) <= SNAP_PX:
+            ny = a_bottom - r.height()
+        else:
+            ny = r.top()
         if nx != r.left() or ny != r.top():
             self.move(nx, ny)
 
@@ -3146,12 +3494,14 @@ class HUDWindow(QMainWindow):
 
         self._logo = QLabel("⬡")
         self._logo.setStyleSheet(
-            f"color:{c('accent').name()};font-size:13px;background:transparent;")
+            f"color:{c('accent').name()};font-size:13px;background:transparent;"
+        )
         tl.addWidget(self._logo)
         self._title_lbl = QLabel("CursorHUD")
         self._title_lbl.setStyleSheet(
             f"color:{c('t_bright').name()};font-family:{_UI_FONT};font-size:10px;"
-            "font-weight:600;letter-spacing:2px;background:transparent;")
+            "font-weight:600;letter-spacing:2px;background:transparent;"
+        )
         tl.addWidget(self._title_lbl)
         tl.addStretch()
 
@@ -3181,7 +3531,10 @@ class HUDWindow(QMainWindow):
         tl.addWidget(self._pin_btn)
 
         self._win_btns: list[tuple[QPushButton, str | None]] = []
-        for sym, slot, hc in [("─", self.showMinimized, None), ("✕", self.close, "#FF4660")]:
+        for sym, slot, hc in [
+            ("─", self.showMinimized, None),
+            ("✕", self.close, "#FF4660"),
+        ]:
             btn = QPushButton(sym)
             btn.setFixedSize(22, 22)
             btn.setCursor(Qt.PointingHandCursor)
@@ -3191,6 +3544,28 @@ class HUDWindow(QMainWindow):
             self._win_btns.append((btn, hc))
         vl.addWidget(tbar)
 
+        # Update banner (hidden by default)
+        self._update_banner = QWidget()
+        self._update_banner.setFixedHeight(24)
+        ubl = QHBoxLayout(self._update_banner)
+        ubl.setContentsMargins(10, 0, 10, 0)
+        ubl.setSpacing(4)
+        self._update_banner.setStyleSheet(
+            f"background:rgba({c('c_amber').red()},{c('c_amber').green()},{c('c_amber').blue()},35);"
+            "border-bottom:1px solid rgba(128,128,128,0.15);"
+        )
+        self._update_lbl = ql("New version available!", 8, c("c_amber"), bold=True)
+        ubl.addWidget(self._update_lbl, 1)
+        self._update_link = ql(
+            f'<a href="{GITHUB_URL}" style="color:inherit;">Update ↗</a>',
+            8,
+            c("c_amber"),
+        )
+        self._update_link.setOpenExternalLinks(True)
+        ubl.addWidget(self._update_link, 0)
+        self._update_banner.hide()
+        vl.addWidget(self._update_banner)
+
         self._nav = NavBar(self.settings)
         self._nav.tab_clicked.connect(self._switch_tab)
         vl.addWidget(self._nav)
@@ -3198,15 +3573,17 @@ class HUDWindow(QMainWindow):
 
         self._stack = CompactStack()
         self._stack.setAttribute(Qt.WA_TranslucentBackground)
-        self._pg_credits  = CreditsPage(self.settings)
+        self._pg_credits = CreditsPage(self.settings)
         self._pg_credits.retry_clicked.connect(self._fetch)
         self._analytics_fetcher: UsageEventsFetcher | None = None
         self._analytics_data: dict | None = None  # None until first successful fetch
-        self._analytics_pending: bool = False  # True when tab shown before _on_data fires
+        self._analytics_pending: bool = (
+            False  # True when tab shown before _on_data fires
+        )
         self._leaderboard_fetcher: LeaderboardFetcher | None = None
         self._leaderboard_data: dict | None = None
         self._leaderboard_pending: bool = False
-        self._pg_profile  = ProfilePage(self.settings)
+        self._pg_profile = ProfilePage(self.settings)
         self._pg_settings = SettingsPage(self.settings)
         self._pg_settings.changed.connect(self._on_settings_changed)
         self._pg_settings.height_adjust_needed.connect(self._adjust_height)
@@ -3216,8 +3593,13 @@ class HUDWindow(QMainWindow):
         self._pg_analytics.refresh_clicked.connect(self._on_analytics_refresh)
         self._pg_leaderboard = LeaderboardPage(self.settings)
         self._pg_leaderboard.refresh_clicked.connect(self._on_leaderboard_refresh)
-        for pg in [self._pg_credits, self._pg_analytics, self._pg_leaderboard,
-                   self._pg_profile, self._pg_settings]:
+        for pg in [
+            self._pg_credits,
+            self._pg_analytics,
+            self._pg_leaderboard,
+            self._pg_profile,
+            self._pg_settings,
+        ]:
             self._stack.addWidget(pg)
         vl.addWidget(self._stack)
         vl.addWidget(Divider())
@@ -3235,7 +3617,9 @@ class HUDWindow(QMainWindow):
         self._mini_layout.setContentsMargins(12, 6, 12, 6)
         self._mini_layout.setSpacing(3)
         # Rows are created dynamically in _update_mini
-        self._mini_groups: list[tuple] = []  # (label_lbl, amount_lbl) per credit type group
+        self._mini_groups: list[
+            tuple
+        ] = []  # (label_lbl, amount_lbl) per credit type group
         self._mini_w.hide()
         vl.addWidget(self._mini_w)
         vl.addWidget(self._status)
@@ -3265,9 +3649,9 @@ class HUDWindow(QMainWindow):
             return
         self._analytics_pending = False
         d = self._last_data
-        cyc      = d["cycle"]
+        cyc = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
-        end_ms   = _date_to_ms(cyc["end"])
+        end_ms = _date_to_ms(cyc["end"])
         self._pg_analytics.set_cycle_label(cyc["start"], cyc["end"])
 
         if not force and self._analytics_data is not None:
@@ -3295,8 +3679,11 @@ class HUDWindow(QMainWindow):
         self._analytics_data = data
         self._pg_analytics.update_data(data)
         self._adjust_height(delay_ms=60)
-        log.info("UsageEventsFetcher data received — %d models, %d events",
-                 len(data.get("model_usage", {})), data.get("total_events", 0))
+        log.info(
+            "UsageEventsFetcher data received — %d models, %d events",
+            len(data.get("model_usage", {})),
+            data.get("total_events", 0),
+        )
 
     def _on_analytics_error(self, msg: str):
         self._pg_analytics.show_error(msg)
@@ -3310,9 +3697,9 @@ class HUDWindow(QMainWindow):
             return
         self._leaderboard_pending = False
         d = self._last_data
-        cyc      = d["cycle"]
+        cyc = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
-        end_ms   = _date_to_ms(cyc["end"])
+        end_ms = _date_to_ms(cyc["end"])
         self._pg_leaderboard.set_cycle_label(cyc["start"], cyc["end"])
 
         if not force and self._leaderboard_data is not None:
@@ -3340,8 +3727,9 @@ class HUDWindow(QMainWindow):
         self._leaderboard_data = data
         self._pg_leaderboard.update_data(data)
         self._adjust_height(delay_ms=60)
-        log.info("LeaderboardFetcher data received — %d users",
-                 data.get("total_users", 0))
+        log.info(
+            "LeaderboardFetcher data received — %d users", data.get("total_users", 0)
+        )
 
     def _on_leaderboard_error(self, msg: str):
         self._pg_leaderboard.show_error(msg)
@@ -3387,10 +3775,12 @@ class HUDWindow(QMainWindow):
     def _on_theme_changed(self, name: str):
         QApplication.instance().setStyleSheet(self._make_qss())
         self._logo.setStyleSheet(
-            f"color:{c('accent').name()};font-size:13px;background:transparent;")
+            f"color:{c('accent').name()};font-size:13px;background:transparent;"
+        )
         self._title_lbl.setStyleSheet(
             f"color:{c('t_bright').name()};font-family:{_UI_FONT};font-size:10px;"
-            "font-weight:600;letter-spacing:2px;background:transparent;")
+            "font-weight:600;letter-spacing:2px;background:transparent;"
+        )
         for btn, hc in self._win_btns:
             btn.setStyleSheet(_icon_btn_qss(hv=hc))
         self._nav.refresh_theme()
@@ -3403,7 +3793,7 @@ class HUDWindow(QMainWindow):
         self._pg_leaderboard.refresh_theme()
         self.update()
         self.repaint()
-        self._apply_scale()   # re-apply QFont objects with updated _UI_FONT
+        self._apply_scale()  # re-apply QFont objects with updated _UI_FONT
         if self._last_data:
             self._pg_credits.update_data(self._last_data)
             self._pg_profile.update_data(self._last_data)
@@ -3455,7 +3845,11 @@ class HUDWindow(QMainWindow):
     def _cycle_theme(self):
         themes = [tn for tn, _ in self._pg_settings.THEMES_ORDER]
         cur = self.settings.get("theme", "light")
-        nxt = themes[(themes.index(cur) + 1) % len(themes)] if cur in themes else themes[0]
+        nxt = (
+            themes[(themes.index(cur) + 1) % len(themes)]
+            if cur in themes
+            else themes[0]
+        )
         self._pg_settings._set_theme(nxt)
 
     def _apply_mini(self):
@@ -3512,45 +3906,66 @@ class HUDWindow(QMainWindow):
         self._status.set_countdown(self._countdown)
         self._status.set_status("loading")
         self._fetcher = DataFetcher()
-        self._fetcher.ready.connect(self._on_data)
+        self._fetcher.ready.connect(lambda data: self._on_data(data, from_cache=False))
         self._fetcher.error.connect(self._on_error)
         self._fetcher.start()
         log.debug("DataFetcher started")
 
-    def _on_data(self, raw: dict):
-        self._last_raw  = raw
+    def _on_data(self, raw: Dict, from_cache: bool = False):
+        if not from_cache:
+            self._last_raw = raw
+            # Cache the successful data only if it's not from cache itself
+            if raw.get("summary_ok", False):
+                save_cache(raw)
+
         self._last_data = parse_data(raw)
         d = self._last_data
         self._pg_profile.update_data(d)
+
+        # Don't show error/loading status if we're just loading initial cache
         if not raw.get("summary_ok", True):
-            self._pg_credits.set_error(S(self.settings, "err_api"))
-            self._status.set_status("error")
+            if not from_cache:
+                # Better error context: could be network or API change
+                err_msg = self.T("err_api")
+                if not raw.get("summary"):
+                    # API body was totally empty/missing
+                    err_msg += f"\n<a href='{GITHUB_URL}/issues' style='color:inherit;'>Check GitHub Issues ↗</a>"
+                self._pg_credits.set_error(err_msg)
+                self._status.set_status("error")
         else:
             self._pg_credits.update_data(d)
             self._pg_credits.set_error("")
-            self._status.set_status("mock" if self._mock_file else "ok")
-        if raw.get("summary_ok", True):
+            if not from_cache:
+                self._status.set_status("mock" if self._mock_file else "ok")
+            else:
+                # Indicate data is from cache/offline
+                self._status.set_status("loading")
+
+        if raw.get("summary_ok", True) and not from_cache:
             cr = d["credit"]
             od = d["on_demand"]
-            msg = (f"{'[MOCK] ' if self._mock_file else ''}data updated — "
-                   f"({cr['budget_pct']:.1f}%) | {usd(cr['budget_used'])} | "
-                   f"{usd(cr['bonus_used'])} | {usd(od['personal'])} |")
+            msg = (
+                f"{'[MOCK] ' if self._mock_file else ''}data updated — "
+                f"({cr['budget_pct']:.1f}%) | {usd(cr['budget_used'])} | "
+                f"{usd(cr['bonus_used'])} | {usd(od['personal'])} |"
+            )
             log.info("%s", msg)
-        else:
-            log.warning("data updated (profile only — usage-summary unavailable)")
+
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
-        # If Analytics tab was opened before first data arrived, fetch now
-        if self._analytics_pending:
-            self._trigger_analytics_fetch(force=False)
-        if self._leaderboard_pending:
-            self._trigger_leaderboard_fetch(force=False)
+
+        if not from_cache and self.settings.get("show_experimental", False):
+            # Synchronize secondary API calls with the main Credits cycle
+            # We use force=True to ensure they refresh even if previously fetched
+            self._trigger_analytics_fetch(force=True)
+            self._trigger_leaderboard_fetch(force=True)
 
         # Update tray tooltip with credit remaining
         if self._tray:
             cr = d["credit"]
             self._tray.setToolTip(
-                f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}")
+                f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}"
+            )
 
     def _update_mini(self, d: dict):
         """Rebuild mini-mode credit groups — 2 rows per credit type.
@@ -3572,23 +3987,23 @@ class HUDWindow(QMainWindow):
                 item.widget().deleteLater()
         self._mini_groups = []  # reset for _apply_scale
 
-        cr         = d["credit"]
-        od         = d["on_demand"]
+        cr = d["credit"]
+        od = d["on_demand"]
         base_limit = max(1, cr["budget_total"])
 
         rows_spec: list[tuple[str, int, QColor]] = [
-            ("row_incl", cr["incl_used"],  c("accent")),
+            ("row_incl", cr["incl_used"], c("accent")),
         ]
         if cr["bonus_used"] > 0:
             rows_spec.append(("row_bonus", cr["bonus_used"], c("c_amber")))
         if od["personal"] > 0:
-            rows_spec.append(("row_extra", od["personal"],   c("c_red")))
+            rows_spec.append(("row_extra", od["personal"], c("c_red")))
 
         for label_key, amount, color in rows_spec:
-            label_text   = S(self.settings, label_key)
-            full_units   = (amount - 1) // base_limit if amount > 0 else 0
+            label_text = S(self.settings, label_key)
+            full_units = (amount - 1) // base_limit if amount > 0 else 0
             partial_frac = (amount - full_units * base_limit) / base_limit
-            filled       = min(full_units, CHIPS_MAX)
+            filled = min(full_units, CHIPS_MAX)
 
             group = QWidget()
             group.setAttribute(Qt.WA_TranslucentBackground)
@@ -3706,8 +4121,8 @@ class HUDWindow(QMainWindow):
         return total
 
     def _do_adjust_height(self):
-        CHROME_H      = 32 + 36 + 2 + 28 + 18
-        CHROME_H_MINI = 32 + 0  + 0 + 28 + 18
+        CHROME_H = 32 + 36 + 2 + 28 + 18
+        CHROME_H_MINI = 32 + 0 + 0 + 28 + 18
 
         if self._mini_mode:
             lyt = self._mini_w.layout()
@@ -3731,26 +4146,42 @@ class HUDWindow(QMainWindow):
         self.setMaximumWidth(WIN_W_MAX)
         self.setMaximumHeight(16777215)
         self.setMinimumHeight(0)
+
         self._target_h = target_h
         if self.height() != target_h:
-            self.resize(self.width(), target_h)
-            self._clamp_to_screen(get_screen_for_pos(self.geometry().center()))
+            # Smooth animation instead of instant resize
+            if self._height_anim.state() == QPropertyAnimation.Running:
+                self._height_anim.stop()
+
+            self._height_anim.setStartValue(self.size())
+            self._height_anim.setEndValue(QSize(self.width(), target_h))
+            self._height_anim.start()
+
+            # Clamp will be called by resizeEvent during animation or after
+            QTimer.singleShot(
+                self._height_anim.duration() + 10,
+                lambda: self._clamp_to_screen(
+                    get_screen_for_pos(self.geometry().center())
+                ),
+            )
 
     def _apply_scale(self):
         if not hasattr(self, "_title_lbl"):
             return
         scale = max(1.0, self.width() / WIN_W)
         self._logo.setStyleSheet(
-            f"color:{c('accent').name()};font-size:13px;background:transparent;")
+            f"color:{c('accent').name()};font-size:13px;background:transparent;"
+        )
         self._title_lbl.setStyleSheet(
             f"color:{c('t_bright').name()};font-family:{_UI_FONT};"
-            "font-size:10px;font-weight:600;letter-spacing:2px;background:transparent;")
+            "font-size:10px;font-weight:600;letter-spacing:2px;background:transparent;"
+        )
         if hasattr(self, "_pg_credits"):
             arc_size = max(90, min(180, int(150 * scale)))
             self._pg_credits.apply_scale(scale, arc_size=arc_size)
         if hasattr(self, "_mini_groups"):
             mini_px = max(8, int(9 * scale))
-            hdr_px  = max(7, int(8 * scale))
+            hdr_px = max(7, int(8 * scale))
             for label_lbl, amount_lbl in self._mini_groups:
                 if amount_lbl is not None:
                     f = amount_lbl.font()
@@ -3786,7 +4217,7 @@ class HUDWindow(QMainWindow):
                 self.move(e.globalPos() - self._drag_pos)
                 return True
             if t == e.MouseButtonRelease:
-                if self._drag_pos:          # snap only after a real drag, not a bare click
+                if self._drag_pos:  # snap only after a real drag, not a bare click
                     self._snap_to_edge()
                 self._drag_pos = None
                 return True
@@ -3794,9 +4225,9 @@ class HUDWindow(QMainWindow):
 
     def closeEvent(self, e):
         p = self.pos()
-        self.settings["win_x"]     = p.x()
-        self.settings["win_y"]     = p.y()
-        self.settings["win_w"]     = self.width()
+        self.settings["win_x"] = p.x()
+        self.settings["win_y"] = p.y()
+        self.settings["win_w"] = self.width()
         self.settings["mini_mode"] = self._mini_mode
         save_settings(self.settings)
         if self._tray:
@@ -3817,10 +4248,12 @@ def enable_dpi():
     if sys.platform == "win32":
         try:
             import ctypes
+
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
         except Exception:
             try:
                 import ctypes
+
                 ctypes.windll.user32.SetProcessDPIAware()
             except Exception:
                 pass
@@ -3832,18 +4265,24 @@ def _macos_launchagent_path() -> Path:
 
 
 def _linux_autostart_path() -> Path:
-    return Path(os.environ.get("XDG_CONFIG_HOME",
-                               str(Path.home() / ".config"))) / "autostart" / "cursor-hud.desktop"
+    return (
+        Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+        / "autostart"
+        / "cursor-hud.desktop"
+    )
 
 
 def register_startup(exe: str):
     if sys.platform == "win32":
         try:
             import winreg
+
             k = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0, winreg.KEY_SET_VALUE)
+                0,
+                winreg.KEY_SET_VALUE,
+            )
             winreg.SetValueEx(k, "CursorHUD", 0, winreg.REG_SZ, exe)
             winreg.CloseKey(k)
         except Exception as e:
@@ -3896,10 +4335,13 @@ def unregister_startup():
     if sys.platform == "win32":
         try:
             import winreg
+
             k = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0, winreg.KEY_SET_VALUE)
+                0,
+                winreg.KEY_SET_VALUE,
+            )
             winreg.DeleteValue(k, "CursorHUD")
             winreg.CloseKey(k)
         except Exception as e:
@@ -3937,9 +4379,11 @@ def _qt_msg_handler(msg_type, context, msg):
 
 def main():
     if "--install-startup" in sys.argv:
-        exe = str(Path(
-            sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
-        ).resolve())
+        exe = str(
+            Path(
+                sys.executable if getattr(sys, "frozen", False) else sys.argv[0]
+            ).resolve()
+        )
         register_startup(exe)
         return
     if "--uninstall-startup" in sys.argv:
@@ -3952,13 +4396,13 @@ def main():
         if idx + 1 < len(sys.argv):
             mock_file = sys.argv[idx + 1]
             if not Path(mock_file).is_file():
-                print(f"[CursorHUD] --mock: file not found: {mock_file}",
-                      file=sys.stderr)
+                print(
+                    f"[CursorHUD] --mock: file not found: {mock_file}", file=sys.stderr
+                )
                 sys.exit(1)
             log.info("mock mode: %s", mock_file)
         else:
-            print("[CursorHUD] --mock requires a file path argument.",
-                  file=sys.stderr)
+            print("[CursorHUD] --mock requires a file path argument.", file=sys.stderr)
             sys.exit(1)
 
     enable_dpi()
@@ -3967,11 +4411,14 @@ def main():
     app = QApplication(sys.argv)
     qInstallMessageHandler(_qt_msg_handler)
     app.setApplicationName("CursorHUD")
-    app.setQuitOnLastWindowClosed(True)  # close window = quit app (tray is supplementary)
+    app.setQuitOnLastWindowClosed(
+        True
+    )  # close window = quit app (tray is supplementary)
 
     if sys.platform == "win32":
         try:
             import ctypes
+
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 "com.cursor-hud.app"
             )
@@ -4013,8 +4460,7 @@ def main():
 
     db = _cursor_db_path()
     if not mock_file and not db.exists():
-        QMessageBox.critical(
-            None, "CursorHUD", S(init_settings, "err_no_db") + str(db))
+        QMessageBox.critical(None, "CursorHUD", S(init_settings, "err_no_db") + str(db))
         sys.exit(1)
 
     win = HUDWindow(mock_file=mock_file)
