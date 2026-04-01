@@ -3911,7 +3911,6 @@ class HUDWindow(QMainWindow):
             self._analytics_pending = False
             self._leaderboard_pending = False
 
-
         # Update tray tooltip with credit remaining
         if self._tray:
             cr = d["credit"]
