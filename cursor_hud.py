@@ -2703,11 +2703,12 @@ class AnalyticsPage(QWidget):
         hl.setSpacing(6)
         self._hdr_model = section_hdr(S(settings, "analytics_model_usage"), "accent")
         hl.addWidget(self._hdr_model, 1)
-        self._cycle_lbl = ql("", 8, c("t_dim"))
-        hl.addWidget(self._cycle_lbl, 0)
+        self._loading_lbl = ql(S(settings, "analytics_loading"), 8, c("t_dim"))
+        self._loading_lbl.hide()
+        hl.addWidget(self._loading_lbl, 0)
         mcl.addWidget(hdr_row)
 
-        self._model_status = ql(S(settings, "analytics_loading"), 9, c("t_dim"))
+        self._model_status = ql("", 9, c("t_dim"))
         mcl.addWidget(self._model_status)
 
         self._model_container = QWidget()
@@ -2726,45 +2727,25 @@ class AnalyticsPage(QWidget):
     def show_waiting(self):
         """Show 'waiting for data' state (DataFetcher not yet ready)."""
         self._model_status.setText(S(self.settings, "analytics_waiting"))
+        self._model_status.show()
+        self._loading_lbl.hide()
         self._model_container.hide()
-        self._cycle_lbl.setText("")
 
     def show_loading(self):
-        """Show loading state while UsageEventsFetcher is running."""
-        self._model_status.setText(S(self.settings, "analytics_loading"))
-        self._model_status.show()
+        """Show loading indicator in header; keep existing data visible."""
+        self._loading_lbl.setText(S(self.settings, "analytics_loading"))
+        self._loading_lbl.show()
 
     def show_error(self, msg: str):
         txt = f"{S(self.settings, 'analytics_error')}: {msg}"
         self._model_status.setText(txt)
         self._model_status.show()
+        self._loading_lbl.hide()
         self._model_container.hide()
-
-    def set_cycle_label(self, start: str, end: str):
-        """Set billing cycle label. start/end are YYYY-MM-DD strings."""
-        self._cycle_start = start
-        self._cycle_end = end
-        self._cycle_lbl.setText(
-            f"{S(self.settings, 'analytics_cycle_label')}: {start} – {end}"
-        )
 
     def update_data(self, data: dict):
         """Populate model usage section from UsageEventsFetcher ready() payload."""
         self._update_model_usage(data.get("model_usage", {}))
-        self._update_events_badge(data.get("total_events", 0))
-
-    def _update_events_badge(self, total_events: int):
-        """Append total event count to the cycle label."""
-        if not total_events:
-            return
-        lang = self.settings.get("lang", "en")
-        tmpl = STRINGS.get(lang, STRINGS["en"]).get(
-            "analytics_events_badge", "{n} events"
-        )
-        badge = tmpl.replace("{n}", str(total_events))
-        existing = self._cycle_lbl.text()
-        if badge not in existing:
-            self._cycle_lbl.setText(f"{existing}  ·  {badge}" if existing else badge)
 
     def _update_model_usage(self, model_agg: dict):
         # Clear previous content
@@ -2773,6 +2754,7 @@ class AnalyticsPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
+        self._loading_lbl.hide()
         if not model_agg:
             self._model_status.setText(S(self.settings, "analytics_no_data"))
             self._model_status.show()
@@ -2842,7 +2824,7 @@ class AnalyticsPage(QWidget):
         self._model_container.show()
 
     def refresh_theme(self):
-        set_lbl_color(self._cycle_lbl, c("t_dim"))
+        set_lbl_color(self._loading_lbl, c("t_dim"))
         set_lbl_color(self._model_status, c("t_dim"))
         self._hdr_model.setStyleSheet(
             ql("", 8, c("accent"), bold=True).styleSheet() + "letter-spacing:1.5px;"
@@ -2850,11 +2832,8 @@ class AnalyticsPage(QWidget):
 
     def refresh_labels(self):
         self._hdr_model.setText(S(self.settings, "analytics_model_usage").upper())
-        if hasattr(self, "_cycle_start"):
-            self._cycle_lbl.setText(
-                f"{S(self.settings, 'analytics_cycle_label')}: "
-                f"{self._cycle_start} – {self._cycle_end}"
-            )
+        if self._loading_lbl.isVisible():
+            self._loading_lbl.setText(S(self.settings, "analytics_loading"))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2892,12 +2871,13 @@ class LeaderboardPage(QWidget):
         hl.setSpacing(6)
         self._hdr_lbl = section_hdr(S(settings, "nav_leaderboard"), "accent")
         hl.addWidget(self._hdr_lbl, 1)
-        self._cycle_lbl = ql("", 8, c("t_dim"))
-        hl.addWidget(self._cycle_lbl, 0)
+        self._loading_lbl = ql(S(settings, "leaderboard_loading"), 8, c("t_dim"))
+        self._loading_lbl.hide()
+        hl.addWidget(self._loading_lbl, 0)
         cl.addWidget(hdr_row)
 
-        # ── Status label (loading / error / no-data) ───────────
-        self._status_lbl = ql(S(settings, "leaderboard_loading"), 9, c("t_dim"))
+        # ── Status label (waiting / error / no-data) ───────────
+        self._status_lbl = ql("", 9, c("t_dim"))
         cl.addWidget(self._status_lbl)
 
         # ── Content area (hidden until data arrives) ──────────
@@ -2966,32 +2946,22 @@ class LeaderboardPage(QWidget):
     def show_waiting(self):
         self._status_lbl.setText(S(self.settings, "leaderboard_waiting"))
         self._status_lbl.show()
+        self._loading_lbl.hide()
         self._content.hide()
-        self._cycle_lbl.setText("")
 
     def show_loading(self):
-        self._status_lbl.setText(S(self.settings, "leaderboard_loading"))
-        self._status_lbl.show()
+        """Show loading indicator in header; keep existing data visible."""
+        self._loading_lbl.setText(S(self.settings, "leaderboard_loading"))
+        self._loading_lbl.show()
 
     def show_error(self, msg: str):
         self._status_lbl.setText(f"{S(self.settings, 'leaderboard_error')}: {msg}")
         self._status_lbl.show()
+        self._loading_lbl.hide()
         self._content.hide()
 
-    def set_cycle_label(self, start: str, end: str):
-        self._cycle_start = start
-        self._cycle_end = end
-        n_members = getattr(self, "_total_users", 0)
-        members_str = S(self.settings, "leaderboard_members")
-        badge = f"{n_members} {members_str}  ·  " if n_members else ""
-        self._cycle_lbl.setText(
-            f"{badge}{S(self.settings, 'leaderboard_cycle_label')}: {start} – {end}"
-        )
-
     def update_data(self, data: dict):
-        self._total_users = data.get("total_users", 0)
-        if hasattr(self, "_cycle_start"):
-            self.set_cycle_label(self._cycle_start, self._cycle_end)
+        self._loading_lbl.hide()
         self._populate_tab(data.get("tab", []))
         self._populate_composer(data.get("composer", []))
         if not data.get("tab") and not data.get("composer"):
@@ -3099,7 +3069,7 @@ class LeaderboardPage(QWidget):
 
     def refresh_theme(self):
         self._apply_styles()
-        set_lbl_color(self._cycle_lbl, c("t_dim"))
+        set_lbl_color(self._loading_lbl, c("t_dim"))
         set_lbl_color(self._status_lbl, c("t_dim"))
         ac = c("accent").name()
         self._hdr_lbl.setStyleSheet(
@@ -3112,8 +3082,8 @@ class LeaderboardPage(QWidget):
         self._hdr_lbl.setText(S(self.settings, "nav_leaderboard").upper())
         self._tab_btn.setText(S(self.settings, "leaderboard_tab"))
         self._composer_btn.setText(S(self.settings, "leaderboard_composer"))
-        if hasattr(self, "_cycle_start"):
-            self.set_cycle_label(self._cycle_start, self._cycle_end)
+        if self._loading_lbl.isVisible():
+            self._loading_lbl.setText(S(self.settings, "leaderboard_loading"))
 
     def _apply_styles(self):
         ac = c("accent").name()
@@ -3612,7 +3582,6 @@ class HUDWindow(QMainWindow):
         cyc = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
         end_ms = _date_to_ms(cyc["end"])
-        self._pg_analytics.set_cycle_label(cyc["start"], cyc["end"])
 
         if not force and self._analytics_data is not None:
             return
@@ -3654,7 +3623,6 @@ class HUDWindow(QMainWindow):
         cyc = d["cycle"]
         start_ms = _date_to_ms(cyc["start"])
         end_ms = _date_to_ms(cyc["end"])
-        self._pg_leaderboard.set_cycle_label(cyc["start"], cyc["end"])
 
         if not force and self._leaderboard_data is not None:
             return
@@ -3901,11 +3869,12 @@ class HUDWindow(QMainWindow):
         self._adjust_height(delay_ms=60)
         self._update_mini(d)
 
-        # Sync analytics and leaderboard with credit data updates
-        if not from_cache and self.settings.get("show_experimental", False):
-            self._trigger_analytics_fetch(force=True)
-            self._trigger_leaderboard_fetch(force=True)
-        elif not from_cache:
+        # Sync analytics and leaderboard at every credit data update (single sync point).
+        # force=True on live fetch; force=False on cache load (fetch only if no data yet).
+        if self.settings.get("show_experimental", False):
+            self._trigger_analytics_fetch(force=not from_cache)
+            self._trigger_leaderboard_fetch(force=not from_cache)
+        else:
             self._analytics_pending = False
             self._leaderboard_pending = False
 
