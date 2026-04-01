@@ -2733,7 +2733,6 @@ class AnalyticsPage(QWidget):
         """Show loading state while UsageEventsFetcher is running."""
         self._model_status.setText(S(self.settings, "analytics_loading"))
         self._model_status.show()
-        self._model_container.hide()
 
     def show_error(self, msg: str):
         txt = f"{S(self.settings, 'analytics_error')}: {msg}"
@@ -2973,7 +2972,6 @@ class LeaderboardPage(QWidget):
     def show_loading(self):
         self._status_lbl.setText(S(self.settings, "leaderboard_loading"))
         self._status_lbl.show()
-        self._content.hide()
 
     def show_error(self, msg: str):
         self._status_lbl.setText(f"{S(self.settings, 'leaderboard_error')}: {msg}")
