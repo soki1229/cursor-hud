@@ -3211,6 +3211,9 @@ class ResizeGrip(QWidget):
             self._dragging = True
             self._start_x = e.globalPos().x()
             self._start_w = self.window().width()
+            win = self.window()
+            if hasattr(win, "_is_manual_resizing"):
+                win._is_manual_resizing = True
 
     def mouseMoveEvent(self, e):
         if self._dragging and self._start_x is not None:
@@ -3221,6 +3224,9 @@ class ResizeGrip(QWidget):
 
     def mouseReleaseEvent(self, _):
         self._dragging = False
+        win = self.window()
+        if hasattr(win, "_is_manual_resizing"):
+            win._is_manual_resizing = False
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3273,6 +3279,7 @@ class HUDWindow(QMainWindow):
         self._current_screen = None
         self._cur_win_w = WIN_W
         self._target_h = WIN_H
+        self._is_manual_resizing = False
         self._height_timer = QTimer(self)
         self._height_timer.setSingleShot(True)
         self._height_timer.timeout.connect(self._do_adjust_height)
@@ -4051,7 +4058,11 @@ class HUDWindow(QMainWindow):
         self._nav.setVisible(not is_mini)
         self._status.setVisible(not is_mini)
 
-        target_w = 420 if self._mini_mode else self._cur_win_w
+        # Only force target width if we are NOT manually resizing
+        if not self._is_manual_resizing:
+            target_w = 440 if self._mini_mode else self._cur_win_w
+        else:
+            target_w = self.width()
 
         if self._mini_mode:
             lyt = self._mini_w.layout()
