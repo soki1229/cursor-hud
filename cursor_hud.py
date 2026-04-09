@@ -494,6 +494,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "leaderboard_composer": "컴포저",
         "leaderboard_members": "명",
         "leaderboard_cycle_label": "청구 주기",
+        "mini_state_plan": "PLAN",
+        "mini_state_payg": "PAYG",
+        "mini_state_bonus": "BONUS",
+        "mini_state_remain_lbl": "남음",
+        "mini_state_used_lbl": "사용",
     },
     "en": {
         "nav_credit": "Credits",
@@ -590,6 +595,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "leaderboard_composer": "Composer",
         "leaderboard_members": "members",
         "leaderboard_cycle_label": "Billing cycle",
+        "mini_state_plan": "PLAN",
+        "mini_state_payg": "PAYG",
+        "mini_state_bonus": "BONUS",
+        "mini_state_remain_lbl": "left",
+        "mini_state_used_lbl": "used",
     },
 }
 
@@ -3201,6 +3211,9 @@ class ResizeGrip(QWidget):
             self._dragging = True
             self._start_x = e.globalPos().x()
             self._start_w = self.window().width()
+            win = self.window()
+            if hasattr(win, "_is_manual_resizing"):
+                win._is_manual_resizing = True
 
     def mouseMoveEvent(self, e):
         if self._dragging and self._start_x is not None:
@@ -3211,6 +3224,9 @@ class ResizeGrip(QWidget):
 
     def mouseReleaseEvent(self, _):
         self._dragging = False
+        win = self.window()
+        if hasattr(win, "_is_manual_resizing"):
+            win._is_manual_resizing = False
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3263,6 +3279,7 @@ class HUDWindow(QMainWindow):
         self._current_screen = None
         self._cur_win_w = WIN_W
         self._target_h = WIN_H
+        self._is_manual_resizing = False
         self._height_timer = QTimer(self)
         self._height_timer.setSingleShot(True)
         self._height_timer.timeout.connect(self._do_adjust_height)
@@ -3543,9 +3560,9 @@ class HUDWindow(QMainWindow):
         # Bars use base plan limit as one full unit; overflow adds extra bars
         self._mini_w = QWidget()
         self._mini_w.setAttribute(Qt.WA_TranslucentBackground)
-        self._mini_layout = QVBoxLayout(self._mini_w)
-        self._mini_layout.setContentsMargins(12, 6, 12, 6)
-        self._mini_layout.setSpacing(3)
+        self._mini_layout = QHBoxLayout(self._mini_w)
+        self._mini_layout.setContentsMargins(10, 4, 10, 4)
+        self._mini_layout.setSpacing(6)
         # Rows are created dynamically in _update_mini
         self._mini_groups: list[
             tuple
@@ -3885,19 +3902,56 @@ class HUDWindow(QMainWindow):
                 f"Cursor HUD — {usd(cr['budget_remain'])} / {usd(cr['budget_total'])}"
             )
 
+    def _create_mini_banner(
+        self, tag: str, amount_str: str, label_str: str, color: QColor
+    ):
+        """Helper for mini mode horizontal layout with 3-section alignment."""
+        group = QWidget()
+        group.setObjectName("MiniBanner")
+        bg_rgba = f"rgba({color.red()}, {color.green()}, {color.blue()}, 15)"
+        border_rgba = f"rgba({color.red()}, {color.green()}, {color.blue()}, 70)"
+        group.setStyleSheet(
+            f"#MiniBanner {{ background: {bg_rgba}; border-left: 3px solid {color.name()}; "
+            f"border: 1px solid {border_rgba}; border-radius: 4px; }}"
+        )
+
+        ghlyt = QHBoxLayout(group)
+        ghlyt.setContentsMargins(6, 4, 6, 4)
+        ghlyt.setSpacing(4)
+
+        # 1. Left: Badge (PLAN/PAYG/BONUS) - Enlarged
+        badge = QLabel(tag)
+        badge.setAlignment(Qt.AlignCenter)
+        # Larger font and width for better visibility
+        badge.setFont(QFont(_UI_FONT, 9, QFont.Bold))
+        badge.setStyleSheet(
+            f"background: {color.name()}; color: {c('bg_win').name()}; "
+            f"padding: 2px 4px; border-radius: 3px; font-size: 10px;"
+        )
+        badge.setFixedWidth(55)
+        ghlyt.addWidget(badge)
+
+        # 2. Middle: Amount ($X.XX) - Centered
+        amt_lbl = QLabel(amount_str)
+        amt_lbl.setAlignment(Qt.AlignCenter)
+        amt_lbl.setFont(QFont(_UI_FONT, 11, QFont.Bold))
+        amt_lbl.setStyleSheet(f"color: {color.name()}; background: transparent;")
+        ghlyt.addWidget(amt_lbl, 1)  # stretch 1 to push other parts
+
+        # 3. Right: Label (used/left) - Right-aligned
+        unit_lbl = QLabel(label_str)
+        unit_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        unit_lbl.setFont(QFont(_UI_FONT, 9, QFont.Medium))
+        bright_hex = c("t_bright").name()
+        unit_lbl.setStyleSheet(f"color: {bright_hex}; background: transparent;")
+        unit_lbl.setFixedWidth(40)
+        ghlyt.addWidget(unit_lbl)
+
+        self._mini_layout.addWidget(group, 1)
+        return badge, amt_lbl, unit_lbl
+
     def _update_mini(self, d: dict):
-        """Rebuild mini-mode credit groups — 2 rows per credit type.
-
-        Row 1 (header+chips):  [type name (stretch)] [chips right-aligned (CHIPS_AREA_W)] [$amount (MINI_AMOUNT_W)]
-        Row 2 (bar):           [MiniBar full width]
-
-        MiniBar extends to the window right edge, same as the amount label.
-        Chips are right-aligned inside CHIPS_AREA_W (addStretch before them).
-
-        Chips are right-aligned inside CHIPS_AREA_W (addStretch before them).
-        full_units formula: (amount-1)//base_limit so amount==base_limit shows
-        bar at 100% with no chips (still within the first unit).
-        """
+        """Rebuild mini-mode in 2-column horizontal style with precise alignment."""
         # ── clear previous widgets ─────────────────────────────────────────
         while self._mini_layout.count():
             item = self._mini_layout.takeAt(0)
@@ -3907,82 +3961,37 @@ class HUDWindow(QMainWindow):
 
         cr = d["credit"]
         od = d["on_demand"]
-        base_limit = max(1, cr["budget_total"])
 
-        rows_spec: list[tuple[str, int, QColor]] = [
-            ("row_incl", cr["incl_used"], c("accent")),
-        ]
-        if cr["bonus_used"] > 0:
-            rows_spec.append(("row_bonus", cr["bonus_used"], c("c_amber")))
-        if od["personal"] > 0:
-            rows_spec.append(("row_extra", od["personal"], c("c_red")))
+        api_pct = cr["api_pct"]
+        spent = od["personal"]
+        remain = cr["budget_remain"]
 
-        for label_key, amount, color in rows_spec:
-            label_text = S(self.settings, label_key)
-            full_units = (amount - 1) // base_limit if amount > 0 else 0
-            partial_frac = (amount - full_units * base_limit) / base_limit
-            filled = min(full_units, CHIPS_MAX)
+        # Column 1: Primary State (PLAN or PAYG)
+        if api_pct < 100:
+            tag1 = S(self.settings, "mini_state_plan")
+            val1 = usd(remain)
+            lbl1 = S(self.settings, "mini_state_remain_lbl")
+            color1 = c("accent")
+        else:
+            tag1 = S(self.settings, "mini_state_payg")
+            val1 = usd(spent)
+            lbl1 = S(self.settings, "mini_state_used_lbl")
+            color1 = c("c_red")
 
-            group = QWidget()
-            group.setAttribute(Qt.WA_TranslucentBackground)
-            gvbox = QVBoxLayout(group)
-            gvbox.setContentsMargins(0, 0, 0, 2)
-            gvbox.setSpacing(1)
+        b1, a1, l1 = self._create_mini_banner(tag1, val1, lbl1, color1)
+        self._mini_groups.append((b1, a1, l1))
 
-            # ── row 1: [label (stretch)] [chips right-aligned] [spacer] ──
-            hdr_row = QWidget()
-            hdr_row.setAttribute(Qt.WA_TranslucentBackground)
-            hl1 = QHBoxLayout(hdr_row)
-            hl1.setContentsMargins(0, 0, 0, 0)
-            hl1.setSpacing(4)
+        # Column 2: Always Bonus
+        tag2 = S(self.settings, "mini_state_bonus")
+        val2 = usd(remain)
+        lbl2 = S(self.settings, "mini_state_remain_lbl")
+        color2 = c("c_amber")
 
-            lbl = QLabel(label_text)
-            lbl.setFont(QFont(_UI_FONT, 8))
-            set_lbl_color(lbl, color)
-            hl1.addWidget(lbl, 1)
-
-            chips_w = QWidget()
-            chips_w.setAttribute(Qt.WA_TranslucentBackground)
-            chips_w.setFixedWidth(CHIPS_AREA_W)
-            cl = QHBoxLayout(chips_w)
-            cl.setContentsMargins(0, 0, 0, 0)
-            cl.setSpacing(CHIP_GAP)
-            cl.addStretch(1)  # push chips to the right
-            for _ in range(filled):
-                chip = MiniBar(h=CHIP_H)
-                chip.setFixedWidth(CHIP_W)
-                chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-                chip.set_value(1.0, color)
-                cl.addWidget(chip)
-            hl1.addWidget(chips_w, 0)
-
-            al = QLabel(usd(amount))
-            al.setFont(QFont(_UI_FONT, 9, QFont.Bold))
-            al.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            al.setFixedWidth(MINI_AMOUNT_W)
-            al.setStyleSheet("background:transparent;")
-            set_lbl_color(al, color)
-            hl1.addWidget(al, 0)
-
-            gvbox.addWidget(hdr_row)
-
-            # ── row 2: [MiniBar full width] ───────────────────────────────
-            bar_row = QWidget()
-            bar_row.setAttribute(Qt.WA_TranslucentBackground)
-            hl2 = QHBoxLayout(bar_row)
-            hl2.setContentsMargins(0, 0, 0, 0)
-            hl2.setSpacing(0)
-
-            bar = MiniBar(h=CHIP_H)
-            bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            bar.set_value(partial_frac, color)
-            hl2.addWidget(bar, 1)
-
-            gvbox.addWidget(bar_row)
-            self._mini_layout.addWidget(group)
-            self._mini_groups.append((lbl, al))
+        b2, a2, l2 = self._create_mini_banner(tag2, val2, lbl2, color2)
+        self._mini_groups.append((b2, a2, l2))
 
     def _on_error(self, err: str):
+
         _metrics.inc("fetch_error")
         log.error("fetch error: %s", err)
         self._pg_credits.set_error(S(self.settings, "err_fetch"))
@@ -4040,7 +4049,20 @@ class HUDWindow(QMainWindow):
 
     def _do_adjust_height(self):
         CHROME_H = 32 + 36 + 2 + 28 + 18
-        CHROME_H_MINI = 32 + 0 + 0 + 28 + 18
+        CHROME_H_MINI = 32 + 10  # Mini mode: only title bar + small margin
+
+        # Hide/Show chrome based on mode
+        is_mini = self._mini_mode
+        self._logo.setVisible(True)  # Always show logo as requested
+        self._title_lbl.setVisible(True)  # Always show title for better identification
+        self._nav.setVisible(not is_mini)
+        self._status.setVisible(not is_mini)
+
+        # Only force target width if we are NOT manually resizing
+        if not self._is_manual_resizing:
+            target_w = 440 if self._mini_mode else self._cur_win_w
+        else:
+            target_w = self.width()
 
         if self._mini_mode:
             lyt = self._mini_w.layout()
@@ -4060,19 +4082,19 @@ class HUDWindow(QMainWindow):
             content_h = self._measure_layout(lyt) if lyt else 200
             target_h = max(CHROME_H + 20, CHROME_H + content_h)
 
-        self.setMinimumWidth(self._cur_win_w)
+        self.setMinimumWidth(0)
         self.setMaximumWidth(WIN_W_MAX)
         self.setMaximumHeight(16777215)
         self.setMinimumHeight(0)
 
         self._target_h = target_h
-        if self.height() != target_h:
+        if self.height() != target_h or self.width() != target_w:
             # Smooth animation instead of instant resize
             if self._height_anim.state() == QPropertyAnimation.Running:
                 self._height_anim.stop()
 
             self._height_anim.setStartValue(self.size())
-            self._height_anim.setEndValue(QSize(self.width(), target_h))
+            self._height_anim.setEndValue(QSize(target_w, target_h))
             self._height_anim.start()
 
             # Clamp will be called by resizeEvent during animation or after
@@ -4098,19 +4120,24 @@ class HUDWindow(QMainWindow):
             arc_size = max(90, min(180, int(150 * scale)))
             self._pg_credits.apply_scale(scale, arc_size=arc_size)
         if hasattr(self, "_mini_groups"):
-            mini_px = max(8, int(9 * scale))
-            hdr_px = max(7, int(8 * scale))
-            for label_lbl, amount_lbl in self._mini_groups:
-                if amount_lbl is not None:
-                    f = amount_lbl.font()
-                    f.setFamily(_UI_FONT)
-                    f.setPointSize(mini_px)
-                    amount_lbl.setFont(f)
-                if label_lbl is not None:
-                    f2 = label_lbl.font()
-                    f2.setFamily(_UI_FONT)
-                    f2.setPointSize(hdr_px)
-                    label_lbl.setFont(f2)
+            amt_px = max(9, int(11 * scale))
+            unit_px = max(7, int(9 * scale))
+            badge_px = max(8, int(10 * scale))
+            for badge, amt, unit in self._mini_groups:
+                if badge:
+                    f = badge.font()
+                    f.setPointSize(badge_px)
+                    f.setBold(True)
+                    badge.setFont(f)
+                if amt:
+                    f = amt.font()
+                    f.setPointSize(amt_px)
+                    f.setBold(True)
+                    amt.setFont(f)
+                if unit:
+                    f = unit.font()
+                    f.setPointSize(unit_px)
+                    unit.setFont(f)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
